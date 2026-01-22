@@ -46,11 +46,14 @@ void MlaAttenVarlenAbsorb(void* output_buffer, void* q_nope_rope_ptr, void* k_pe
   }
 
   // Copy cache of flexible tokens from src blocks to dst blocks
-  if (total_prefix_tokens > 0 && flexible_len != 0) {
-    CUDA_CHECK_LAST_ERROR(llm_kernels::nvidia::MlaFlexibleTokenCacheCopy<SCALAR_T, CACHE_T, KV_DTYPE>(
-        reinterpret_cast<CACHE_T**>(src_flexible_kv_cache_ptr), reinterpret_cast<CACHE_T**>(dst_flexible_kv_cache_ptr),
-        reinterpret_cast<int*>(src_flexible_token_idx_ptr), reinterpret_cast<int*>(dst_flexible_token_idx_ptr),
-        block_size, layer_index, flexible_len, qk_rope_head_dim + kv_lora_rank, stream));
+  if constexpr (KV_DTYPE != llm_kernels::utils::KVCacheType::kFp8DsMla) {
+    if (total_prefix_tokens > 0 && flexible_len != 0) {
+      CUDA_CHECK_LAST_ERROR(llm_kernels::nvidia::MlaFlexibleTokenCacheCopy<SCALAR_T, CACHE_T, KV_DTYPE>(
+          reinterpret_cast<CACHE_T**>(src_flexible_kv_cache_ptr),
+          reinterpret_cast<CACHE_T**>(dst_flexible_kv_cache_ptr), reinterpret_cast<int*>(src_flexible_token_idx_ptr),
+          reinterpret_cast<int*>(dst_flexible_token_idx_ptr), block_size, layer_index, flexible_len,
+          qk_rope_head_dim + kv_lora_rank, stream));
+    }
   }
 
   if (rotary_embedding_cuda.has_value()) {
@@ -65,9 +68,9 @@ void MlaAttenVarlenAbsorb(void* output_buffer, void* q_nope_rope_ptr, void* k_pe
   // copy new k&v to kv cache block
   // Use compressed kvcache, k is [num_token, qk_rope_head_dim], v is  [num_token, kv_lora_rank]
   CUDA_CHECK_LAST_ERROR(llm_kernels::nvidia::MlaFlashKVCacheCopy<SCALAR_T, CACHE_T, KV_DTYPE>(
-      reinterpret_cast<SCALAR_T*>(k_pe_ptr), reinterpret_cast<SCALAR_T*>(compressed_kv_ptr), k_list, k_list,
+      reinterpret_cast<SCALAR_T*>(compressed_kv_ptr), reinterpret_cast<SCALAR_T*>(k_pe_ptr), k_list, k_list,
       reinterpret_cast<size_t*>(prefix_offsets), reinterpret_cast<size_t*>(seqlens_without_prefix_ptr),
-      reinterpret_cast<int*>(block_offsets), block_size, batch_size, total_q_tokens, qk_rope_head_dim, kv_lora_rank,
+      reinterpret_cast<int*>(block_offsets), block_size, batch_size, total_q_tokens, kv_lora_rank, qk_rope_head_dim,
       k_scale, v_scale, stream));
 
   const int total_tokens = total_q_tokens + total_prefix_tokens;
@@ -104,32 +107,35 @@ void MlaAttenVarlenAbsorb(void* output_buffer, void* q_nope_rope_ptr, void* k_pe
           total_q_tokens, qk_rope_head_dim, kv_lora_rank, stream));
     }
 
-    if (flexible_len != 0) {
-      // TODO(zhongzhicao): For DeepSeek model, the twice rope of flexible cached tokens can be fused by calculating the
-      // subtraction of dst_token_idx and src_token_idx. However, in subsequent development, the token_idx in src_req
-      // and dst_req may not guarantee consistency, thus there could be both positive and negative value in
-      // flexible_rotary_embedding_pos, requiring an additional tensor to mark whether to excute reverse rope.
-      if (rotary_embedding_cuda.has_value()) {
-        // reverse rope for flexible cached tokens, with is_reverse flag setting to true.
-        rotary_embedding_cuda->SetInput(reinterpret_cast<int64_t*>(src_flexible_rotary_embedding_pos_ptr),
-                                        reinterpret_cast<int64_t*>(flexible_rotary_embedding_mask_ptr), nullptr,
-                                        k_rope_buffer, total_tokens, stream, 0, /*key_stride=*/0, 0, qk_rope_head_dim,
-                                        /* is_reverse */ true);
-        CUDA_CHECK_LAST_ERROR(rotary_embedding_cuda->Forward<SCALAR_T>());
+    if constexpr (KV_DTYPE != llm_kernels::utils::KVCacheType::kFp8DsMla) {
+      if (flexible_len != 0) {
+        // TODO(zhongzhicao): For DeepSeek model, the twice rope of flexible cached tokens can be fused by calculating
+        // the subtraction of dst_token_idx and src_token_idx. However, in subsequent development, the token_idx in
+        // src_req and dst_req may not guarantee consistency, thus there could be both positive and negative value in
+        // flexible_rotary_embedding_pos, requiring an additional tensor to mark whether to excute reverse rope.
+        if (rotary_embedding_cuda.has_value()) {
+          // reverse rope for flexible cached tokens, with is_reverse flag setting to true.
+          rotary_embedding_cuda->SetInput(reinterpret_cast<int64_t*>(src_flexible_rotary_embedding_pos_ptr),
+                                          reinterpret_cast<int64_t*>(flexible_rotary_embedding_mask_ptr), nullptr,
+                                          k_rope_buffer, total_tokens, stream, 0, /*key_stride=*/0, 0, qk_rope_head_dim,
+                                          /* is_reverse */ true);
+          CUDA_CHECK_LAST_ERROR(rotary_embedding_cuda->Forward<SCALAR_T>());
 
-        // correct rope for flexible cached tokens
-        rotary_embedding_cuda->SetInput(reinterpret_cast<int64_t*>(dst_flexible_rotary_embedding_pos_ptr),
-                                        reinterpret_cast<int64_t*>(flexible_rotary_embedding_mask_ptr), nullptr,
-                                        k_rope_buffer, total_tokens, stream, 0, /*key_stride=*/0, 0, qk_rope_head_dim);
-        CUDA_CHECK_LAST_ERROR(rotary_embedding_cuda->Forward<SCALAR_T>());
+          // correct rope for flexible cached tokens
+          rotary_embedding_cuda->SetInput(reinterpret_cast<int64_t*>(dst_flexible_rotary_embedding_pos_ptr),
+                                          reinterpret_cast<int64_t*>(flexible_rotary_embedding_mask_ptr), nullptr,
+                                          k_rope_buffer, total_tokens, stream, 0, /*key_stride=*/0, 0,
+                                          qk_rope_head_dim);
+          CUDA_CHECK_LAST_ERROR(rotary_embedding_cuda->Forward<SCALAR_T>());
+        }
+
+        // copy flexible cached k to k cache block
+        CUDA_CHECK_LAST_ERROR(llm_kernels::nvidia::MlaFlashFlexibleKCacheCopy<SCALAR_T, CACHE_T, KV_DTYPE>(
+            reinterpret_cast<SCALAR_T*>(k_rope_buffer), k_list, reinterpret_cast<size_t*>(flexible_offset_uint64_ptr),
+            reinterpret_cast<size_t*>(prefix_offsets), reinterpret_cast<size_t*>(seqlens_with_prefix_ptr),
+            reinterpret_cast<int*>(block_offsets), block_size, batch_size, total_tokens, qk_rope_head_dim, kv_lora_rank,
+            k_scale, stream));
       }
-
-      // copy flexible cached k to k cache block
-      CUDA_CHECK_LAST_ERROR(llm_kernels::nvidia::MlaFlashFlexibleKCacheCopy<SCALAR_T, CACHE_T, KV_DTYPE>(
-          reinterpret_cast<SCALAR_T*>(k_rope_buffer), k_list, reinterpret_cast<size_t*>(flexible_offset_uint64_ptr),
-          reinterpret_cast<size_t*>(prefix_offsets), reinterpret_cast<size_t*>(seqlens_with_prefix_ptr),
-          reinterpret_cast<int*>(block_offsets), block_size, batch_size, total_tokens, qk_rope_head_dim, kv_lora_rank,
-          k_scale, stream));
     }
 
     // calc k_nope by latent_buffer @ kv_b_nope_proj. k_nope: [token_num, head, qk_nope_head_dim]
@@ -205,7 +211,8 @@ void MlaAttenVarlenAbsorb(void* output_buffer, void* q_nope_rope_ptr, void* k_pe
 
   // Enables kContextDecodeUseFP8Cache to simulate the effect of KV cache quantization on flash attention,
   // intended for use in testing accuracy outcomes only.
-  if constexpr (KV_DTYPE != llm_kernels::utils::KVCacheType::kAuto) {
+  if constexpr (KV_DTYPE != llm_kernels::utils::KVCacheType::kAuto &&
+                KV_DTYPE != llm_kernels::utils::KVCacheType::kFp8DsMla) {
     if (kContextDecodeUseFP8Cache) {
       const int stride_size_k = num_heads * (qk_nope_head_dim + qk_rope_head_dim);
       const int stride_size_v = num_heads * v_head_dim;
@@ -382,6 +389,16 @@ size_t FlashMlaAttentionLayer::GetWorkspaceSize() {
 }
 
 Status FlashMlaAttentionLayer::Forward(const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) {
+  if (kv_cache_dtype_ == TYPE_FP8_DS_MLA) {
+    switch (inter_data_type_) {
+      case DataType::TYPE_FP16:
+        return ForwardT<float16, uint8_t, llm_kernels::utils::KVCacheType::kFp8DsMla>(input_tensors, output_tensors);
+      case DataType::TYPE_BF16:
+        return ForwardT<bfloat16, uint8_t, llm_kernels::utils::KVCacheType::kFp8DsMla>(input_tensors, output_tensors);
+      default:
+        KLLM_THROW(fmt::format("{}: Unsupported Dtype type: {}.", __PRETTY_FUNCTION__, inter_data_type_));
+    }
+  }
   DISPATCH_BY_DTYPE_AND_KVTYPE(inter_data_type_, kv_cache_dtype_, ForwardT, input_tensors, output_tensors);
 }
 

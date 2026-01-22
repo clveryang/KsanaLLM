@@ -28,6 +28,7 @@ class FlashMlaAttention {
   std::shared_ptr<Linear> kv_b_nope_proj_;
   std::shared_ptr<Linear> v_head_proj_;
   std::shared_ptr<BaseLayer> flash_mla_attention_layer_;
+  std::shared_ptr<BaseLayer> flash_sparse_mla_attention_layer_;
 
   Tensor kv_b_nope_proj_weight_;
   Tensor v_head_proj_weight_;

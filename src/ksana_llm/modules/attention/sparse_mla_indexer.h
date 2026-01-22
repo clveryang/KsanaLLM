@@ -32,10 +32,12 @@ class SparseMlaIndexer {
   //   - x: hidden states [batch, seq_len, hidden_dim]
   //   - qr: query lora output [batch, seq_len, q_lora_rank]
   //   - workspace: store intermediate results
+  //   - context_use_dsa: whether to use DSA for context tokens,
+  //                      if not, only need to store K into the KV cache of indexer
   // Outputs:
   //   - topk_indices: top-k indices [batch, seq_len, n_heads, index_topk]
-  Status Forward(const Tensor& x, const Tensor& qr, Tensor& workspace, Tensor& topk_indices,
-                 ForwardingContext& forwarding_context);
+  Status Forward(const Tensor& x, const Tensor& qr, const Tensor& workspace, const bool context_use_dsa,
+                 Tensor& topk_indices, ForwardingContext& forwarding_context);
 
  private:
   const int layer_idx_;

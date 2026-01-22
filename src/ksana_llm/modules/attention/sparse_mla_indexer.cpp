@@ -59,8 +59,8 @@ SparseMlaIndexer::SparseMlaIndexer(int layer_idx, LayerCreationContext& creation
       creation_context.pipeline_config.lower_layer_idx);
 }
 
-Status SparseMlaIndexer::Forward(const Tensor& x, const Tensor& qr, Tensor& workspace, Tensor& topk_indices,
-                                 ForwardingContext& forwarding_context) {
+Status SparseMlaIndexer::Forward(const Tensor& x, const Tensor& qr, const Tensor& workspace, const bool context_use_dsa,
+                                 Tensor& topk_indices, ForwardingContext& forwarding_context) {
   const int rank = forwarding_context.GetCurrentRank();
 
   PROFILE_EVENT_SCOPE(mla_forward, "sparse_mla_index_forward", rank);
@@ -85,13 +85,26 @@ Status SparseMlaIndexer::Forward(const Tensor& x, const Tensor& qr, Tensor& work
     STATUS_CHECK_RETURN(k_norm_->Forward(k_indexer_tensors, k_indexer_tensors));
   }
 
+  // Calculate token counts
+  const auto model_input = forwarding_context.GetModelInput();
+  const size_t dp_context_tokens = model_input->dp_context_tokens;
+  const size_t dp_decode_tokens = model_input->dp_decode_tokens;
+
   // Step 3: Compute weights = weights_proj(x)
   // Input: x [total_tokens, dim]
   // Output: weight [total_tokens, n_local_heads]
   std::vector<Tensor> weights_tensors{workspace.GetView({total_tokens, n_heads_}, total_tokens * head_dim_)};
   {
     PROFILE_EVENT_SCOPE(weights_proj_forward, "indexer_weights_proj", rank);
-    STATUS_CHECK_RETURN(weights_proj_->Forward(x, weights_tensors));
+    if (context_use_dsa || dp_context_tokens == 0) {
+      STATUS_CHECK_RETURN(weights_proj_->Forward(x, weights_tensors));
+    } else if (dp_decode_tokens > 0) {
+      Tensor decode_x = x.GetView({dp_decode_tokens, x.shape[1]}, dp_context_tokens * x.shape[1]);
+      std::vector<Tensor> decode_weights_tensors = {
+          weights_tensors[0].GetView({dp_decode_tokens, n_heads_}, dp_context_tokens * n_heads_)};
+      STATUS_CHECK_RETURN(weights_proj_->Forward(decode_x, decode_weights_tensors));
+      weights_tensors[0].shape = decode_weights_tensors[0].shape;
+    }
   }
 
   // Step 4: Query projection q = wq_b(qr)
@@ -100,22 +113,26 @@ Status SparseMlaIndexer::Forward(const Tensor& x, const Tensor& qr, Tensor& work
   std::vector<Tensor> q_indexer_tensors{x.GetView({total_tokens, n_heads_, head_dim_})};
   {
     PROFILE_EVENT_SCOPE(wq_b_forward, "indexer_wq_b", rank);
-    STATUS_CHECK_RETURN(wq_b_->Forward(qr, q_indexer_tensors));
+    if (context_use_dsa || dp_context_tokens == 0) {
+      STATUS_CHECK_RETURN(wq_b_->Forward(qr, q_indexer_tensors));
+    } else if (dp_decode_tokens > 0) {
+      Tensor decode_qr = qr.GetView({dp_decode_tokens, qr.shape[1]}, dp_context_tokens * qr.shape[1]);
+      std::vector<Tensor> decode_q_indexer_tensors = {q_indexer_tensors[0].GetView(
+          {dp_decode_tokens, n_heads_, head_dim_}, dp_context_tokens * n_heads_ * head_dim_)};
+      STATUS_CHECK_RETURN(wq_b_->Forward(decode_qr, decode_q_indexer_tensors));
+      q_indexer_tensors[0].shape = decode_q_indexer_tensors[0].shape;
+    }
   }
 
   // Step 5: Process flash and paged attention separately
   Tensor quant_workspace = workspace.GetView({}, total_tokens * (n_heads_ + head_dim_));
-  auto model_input = forwarding_context.GetModelInput();
   auto& attn_ctx = forwarding_context.GetAttentionForwardContext();
 
-  // Calculate token counts
-  const size_t dp_context_tokens = model_input->dp_context_tokens;
-  const size_t dp_decode_tokens = model_input->dp_decode_tokens;
   if (dp_context_tokens > 0) {
     // Flash attention for prefill tokens (first dp_context_tokens)
     Tensor context_q_indexer = q_indexer_tensors[0].GetView({dp_context_tokens, n_heads_, head_dim_});
     Tensor context_k_indexer = k_indexer_tensors[0].GetView({dp_context_tokens, head_dim_});
-    Tensor context_weights = weights_tensors[0].GetView({dp_context_tokens, n_heads_});
+    Tensor context_weights = (context_use_dsa ? weights_tensors[0].GetView({dp_context_tokens, n_heads_}) : Tensor{});
 
     std::vector<Tensor> context_output_tensors = {topk_indices.GetView({dp_context_tokens, index_topk_})};
     STATUS_CHECK_RETURN(flash_sparse_mla_indexer_->Forward(model_input, attn_ctx, context_q_indexer, context_k_indexer,

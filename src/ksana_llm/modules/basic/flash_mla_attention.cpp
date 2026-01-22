@@ -11,10 +11,9 @@ namespace ksana_llm {
 
 FlashMlaAttention::FlashMlaAttention(const size_t layer_idx, bool is_neox, const LayerCreationContext& creation_context,
                                      const AttentionCreationConfig& attn_config) {
+  flash_mla_attention_layer_ = std::make_shared<FlashMlaAttentionLayer>();
   if (attn_config.model_config.use_dsa) {
-    flash_mla_attention_layer_ = std::make_shared<FlashSparseMlaAttentionLayer>();
-  } else {
-    flash_mla_attention_layer_ = std::make_shared<FlashMlaAttentionLayer>();
+    flash_sparse_mla_attention_layer_ = std::make_shared<FlashSparseMlaAttentionLayer>();
   }
 
   uint32_t qk_rope_head_dim = attn_config.model_config.mla_config.qk_rope_head_dim;
@@ -72,6 +71,12 @@ FlashMlaAttention::FlashMlaAttention(const size_t layer_idx, bool is_neox, const
 
   flash_mla_attention_layer_->SetWorkspaceBuffer(
       creation_context.workspace_mgr->GetWorkspace(flash_mla_attention_layer_->GetWorkspaceSize()));
+  if (flash_sparse_mla_attention_layer_) {
+    flash_sparse_mla_attention_layer_->Init(flash_attention_param, creation_context.runtime_config,
+                                            creation_context.context, creation_context.rank);
+    flash_sparse_mla_attention_layer_->SetWorkspaceBuffer(
+        creation_context.workspace_mgr->GetWorkspace(flash_sparse_mla_attention_layer_->GetWorkspaceSize()));
+  }
 
   // Initialize proj module
   kv_b_nope_proj_ = std::make_shared<Linear>(fmt::format("model.layers.{}.self_attn.kv_b_nope_proj.weight", layer_idx),
@@ -95,8 +100,9 @@ Status FlashMlaAttention::Forward(const std::shared_ptr<ModelInput>& model_input
                                   Tensor& kv_buffer_tensor, Tensor& k_rope_buffer_tensor,
                                   Tensor& prefix_kv_buffer_tensor, Tensor& indices_tensor,
                                   std::vector<Tensor>& output_tensors) {
+  // When indices tensor is present, use DSA; otherwise, use MHA
   if (indices_tensor.GetElementNumber() > 0) {
-    return flash_mla_attention_layer_->Forward(
+    return flash_sparse_mla_attention_layer_->Forward(
         {model_input->flash_input.rotary_embedding_pos, model_input->flash_input.rotary_embedding_mask,
          context_q_rope_tensor, k_rope_buffer_tensor, context_q_nope_tensor, /*q_ptr*/ k_buffer[0], kv_buffer_tensor,
          model_input->flash_input.kv_list, model_input->dp_input_prefix_uint64_tensor,
@@ -144,4 +150,5 @@ Status FlashMlaAttention::Forward(const std::shared_ptr<ModelInput>& model_input
                                                output_tensors);
   }
 }
+
 }  // namespace ksana_llm

@@ -46,8 +46,8 @@ class MlaPagedAttentionTestSuit : public NvidiaTestSuitBase {
     total_len_with_prefix_ = total_len_without_prefix_ + total_prefix_len_;
 
     // k_src & v_src.
-    k_value_num_ = is_indexer ? index_head_dim_ : qk_rope_head_dim_;
-    v_value_num_ = is_indexer ? index_head_dim_ / quant_block_size_ : kv_lora_rank_;
+    k_value_num_ = is_indexer ? index_head_dim_ : kv_lora_rank_;
+    v_value_num_ = is_indexer ? index_head_dim_ / quant_block_size_ : qk_rope_head_dim_;
     for (size_t i = 0; i < batch_size_; ++i) {
       size_t prefix_len = input_prefix_len_[i];
       for (int j = 0; j < input_token_num_[i]; ++j) {
@@ -572,7 +572,7 @@ TEST_F(MlaPagedAttentionTestSuit, MlaFlashKVCacheCopyKernelAccTest) {
   // Lanch kernel wrapper.
   MlaFlashKVCacheCopy<float, float, llm_kernels::utils::KVCacheType::kAuto>(
       dev_k_src_, dev_v_src_, dev_k_list_, dev_k_list_, dev_prefix_offsets_, dev_without_prefix_offsets_,
-      dev_block_offsets_, block_size_, batch_size_, total_len_without_prefix_, qk_rope_head_dim_, kv_lora_rank_,
+      dev_block_offsets_, block_size_, batch_size_, total_len_without_prefix_, kv_lora_rank_, qk_rope_head_dim_,
       k_scale_, v_scale_, nullptr);
   cudaDeviceSynchronize();
 
@@ -587,20 +587,20 @@ TEST_F(MlaPagedAttentionTestSuit, MlaFlashKVCacheCopyKernelAccTest) {
     size_t prefix_len = input_prefix_len_[batch_idx];
     for (int token_idx = 0; token_idx < input_token_num_[batch_idx]; ++token_idx) {
       // Check k.
-      for (int k_idx = 0; k_idx < qk_rope_head_dim_; ++k_idx) {
+      for (int k_idx = 0; k_idx < kv_lora_rank_; ++k_idx) {
         if (static_cast<size_t>(token_idx) >= prefix_len) {
           size_t k_total_dst_idx = host_block_offsets_[batch_idx] * block_size_ * (kv_lora_rank_ + qk_rope_head_dim_) +
-                                   token_idx * (kv_lora_rank_ + qk_rope_head_dim_) + (kv_lora_rank_ + k_idx);
+                                   token_idx * (kv_lora_rank_ + qk_rope_head_dim_) + k_idx;
           EXPECT_FLOAT_EQ(host_k_src_[k_total_idx], host_k_dst[k_total_dst_idx]);
           ++k_total_idx;
         }
       }
 
       // Check v.
-      for (int v_idx = 0; v_idx < kv_lora_rank_; ++v_idx) {
+      for (int v_idx = 0; v_idx < qk_rope_head_dim_; ++v_idx) {
         if (static_cast<size_t>(token_idx) >= prefix_len) {
           size_t v_total_dst_idx = host_block_offsets_[batch_idx] * block_size_ * (kv_lora_rank_ + qk_rope_head_dim_) +
-                                   token_idx * (kv_lora_rank_ + qk_rope_head_dim_) + v_idx;
+                                   token_idx * (kv_lora_rank_ + qk_rope_head_dim_) + (kv_lora_rank_ + v_idx);
           EXPECT_FLOAT_EQ(host_v_src_[v_total_idx], host_k_dst[v_total_dst_idx]);
           ++v_total_idx;
         }
@@ -613,7 +613,7 @@ TEST_F(MlaPagedAttentionTestSuit, MlaPagedKVCacheCopyKernelAccTest) {
   for (int req_q_len = 1; req_q_len <= 2; ++req_q_len) {
     // Lanch kernel wrapper.
     MlaPagedKVCacheCopy<float, float, llm_kernels::utils::KVCacheType::kAuto>(
-        dev_v_src_, dev_k_src_, dev_k_list_, dev_input_lengths_, dev_block_offsets_, block_size_, batch_size_,
+        dev_k_src_, dev_v_src_, dev_k_list_, dev_input_lengths_, dev_block_offsets_, block_size_, batch_size_,
         req_q_len, kv_lora_rank_, qk_rope_head_dim_, k_scale_, stream);
     CHECK_NVIDIA_CUDA_ERROR(cudaStreamSynchronize(stream));
 
@@ -631,7 +631,7 @@ TEST_F(MlaPagedAttentionTestSuit, MlaPagedKVCacheCopyKernelAccTest) {
           size_t kv_c_total_dst_idx =
               host_block_offsets_[batch_idx] * block_size_ * (kv_lora_rank_ + qk_rope_head_dim_) +
               (input_token_num_[batch_idx] - req_q_len + token_idx) * (kv_lora_rank_ + qk_rope_head_dim_) + i;
-          EXPECT_FLOAT_EQ(host_v_src_[kv_c_total_idx], host_k_dst[kv_c_total_dst_idx]);
+          EXPECT_FLOAT_EQ(host_k_src_[kv_c_total_idx], host_k_dst[kv_c_total_dst_idx]);
           ++kv_c_total_idx;
         }
         // Check k_pe.
@@ -640,7 +640,7 @@ TEST_F(MlaPagedAttentionTestSuit, MlaPagedKVCacheCopyKernelAccTest) {
               host_block_offsets_[batch_idx] * block_size_ * (kv_lora_rank_ + qk_rope_head_dim_) +
               (input_token_num_[batch_idx] - req_q_len + token_idx) * (kv_lora_rank_ + qk_rope_head_dim_) +
               (kv_lora_rank_ + i);
-          EXPECT_FLOAT_EQ(host_k_src_[k_pe_total_idx], host_k_dst[k_pe_total_dst_idx]);
+          EXPECT_FLOAT_EQ(host_v_src_[k_pe_total_idx], host_k_dst[k_pe_total_dst_idx]);
           ++k_pe_total_idx;
         }
       }
@@ -779,7 +779,6 @@ TEST_F(MlaPagedAttentionTestSuit, MlaGetFromCompressedCacheTest) {
   cudaFree(dev_rope_buffer);
 }
 
-
 TEST_F(MlaPagedAttentionTestSuit, MlaReverseFlashKVCacheCopyTest) {
   // 初始化缓存块数据
   const size_t kv_stride_size = kv_lora_rank_ + qk_rope_head_dim_;
@@ -822,7 +821,7 @@ TEST_F(MlaPagedAttentionTestSuit, MlaReverseFlashKVCacheCopyTest) {
       dev_rope_buffer, dev_latent_buffer, dev_k_list_, dev_prefix_offsets_, dev_input_offsets_, dev_block_offsets_,
       block_size_, total_len, qk_rope_head_dim_, kv_lora_rank_, k_scale_, v_scale_, stream);
   MlaFlashWithoutPrefixKVCopy<float, float, llm_kernels::utils::KVCacheType::kAuto>(
-      dev_rope_buffer, dev_latent_buffer, dev_k_src_, dev_v_src_, dev_prefix_offsets_, dev_without_prefix_offsets_,
+      dev_rope_buffer, dev_latent_buffer, dev_v_src_, dev_k_src_, dev_prefix_offsets_, dev_without_prefix_offsets_,
       total_q_len, qk_rope_head_dim_, kv_lora_rank_, stream);
 
   cudaStreamSynchronize(stream);
@@ -835,8 +834,8 @@ TEST_F(MlaPagedAttentionTestSuit, MlaReverseFlashKVCacheCopyTest) {
   // 验证结果
   const float* host_latent_ptr = host_latent_buffer.data();
   const float* host_rope_ptr = host_rope_buffer.data();
-  const float* host_k_src_ptr = host_k_src_.data();
-  const float* host_v_src_ptr = host_v_src_.data();
+  const float* host_k_src_ptr = host_v_src_.data();
+  const float* host_v_src_ptr = host_k_src_.data();
 
   for (size_t batch_idx = 0; batch_idx < batch_size_; ++batch_idx) {
     size_t token_offset = host_input_offsets_[batch_idx];

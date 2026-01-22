@@ -215,18 +215,13 @@ class MultiHeadLatentAttentionTestModel : public CommonModel {
       hidden_buffer_tensors_1[0].dtype = model_config_.weight_data_type;
     }
     std::vector<float> output;
-    if (model_config_.use_dsa) {
-      if (is_multi_token_forward) {
+    if (is_multi_token_forward) {
+      if (model_config_.use_dsa && std::getenv("CONTEXT_DSA_THRESHOLD") != nullptr) {
         // Prefill phase (no prefix cache for DSA test)
         // The numerical difference here is due to sparse mla applies weight absorption for prefill tokens,
         // while in this test, weights w_uk_t/w_uv and kv_b_nope_proj/v_head_proj are not equivalent
         output = {1416, 65.5, -1248, -2672, 856, -692};
-      } else {
-        // Decode phase
-        output = {744, 748, 118, -684, 201, -716};
-      }
-    } else if (is_multi_token_forward) {
-      if (runtime_config_.attn_backend_config.kv_cache_dtype == TYPE_FP8_E4M3) {
+      } else if (runtime_config_.attn_backend_config.kv_cache_dtype == TYPE_FP8_E4M3) {
         if (forwarding_context_->model_input_->dp_total_prefix_len == 0) {
           output = {-1984, 2096, -3392, 784, 117.5, -564};
         } else {
@@ -240,7 +235,9 @@ class MultiHeadLatentAttentionTestModel : public CommonModel {
         }
       }
     } else {
-      if (runtime_config_.attn_backend_config.kv_cache_dtype == TYPE_FP8_E4M3) {
+      if (model_config_.use_dsa) {
+        output = {744, 748, 118, -684, 201, -716};
+      } else if (runtime_config_.attn_backend_config.kv_cache_dtype == TYPE_FP8_E4M3) {
         output = {548, 940, 362, -45.75, -75.5, -564};
       } else {
         output = {559.5, 935.5, 366.25, -55.0312, -76.1875, -564};
@@ -560,6 +557,12 @@ TEST_F(MlaTest, ForwardWithFlashDsaTest) {
   runtime_config.inter_data_type = model_config.weight_data_type;
   model_config.quant_config.method = QUANT_NONE;
   std::cout << "Test TYPE_BF16 weight_data_type forward." << std::endl;
+  // Adaptive fall back
   TestMlaForward<bfloat16>();
+  // Force DSA
+  setenv("CONTEXT_DSA_THRESHOLD", "0", 1);
+  TestMlaForward<bfloat16>();
+  // Unset the env
+  unsetenv("CONTEXT_DSA_THRESHOLD");
   return;
 }

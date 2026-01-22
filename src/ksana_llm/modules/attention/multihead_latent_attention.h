@@ -51,7 +51,7 @@ class MultiHeadLatentAttention {
 
  private:
   const int layer_idx_;
-  const int tensor_parallel_size_;
+  const size_t tensor_parallel_size_;
   MlaBuffers& mla_buffers_;
 
  protected:
@@ -84,6 +84,8 @@ class MultiHeadLatentAttention {
   std::shared_ptr<Layernorm> q_a_layernorms_;
   std::shared_ptr<SparseMlaIndexer> sparse_mla_indexer_;
 
+  // Use dsa only if input_length > context_dsa_threshold_ for efficiency
+  size_t context_dsa_threshold_ = 0;
   size_t o_proj_k_dim_ = 0;
 
   inline static size_t qk_nope_head_dim_ = 0;

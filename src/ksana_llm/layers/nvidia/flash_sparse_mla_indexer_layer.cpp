@@ -45,7 +45,6 @@ struct FlashMlaInputData {
 
   size_t total_q_tokens;  // new tokens without prefix
   int batch_size;
-  int64_t prefill_token_count;
   int total_prefix_tokens;  // prefix tokens
   cudaStream_t stream;
 };
@@ -166,7 +165,6 @@ static FlashMlaInputData<SCALAR_T> ParseInputTensors(const std::vector<Tensor>& 
                                    .forward_shape_tensor = forward_shape_tensor,
                                    .total_q_tokens = q_tensor.shape[0],
                                    .batch_size = batch_size,
-                                   .prefill_token_count = static_cast<int64_t>(q_tensor.shape[0]),
                                    .total_prefix_tokens = total_prefix_tokens,
                                    .stream = context->GetComputeStreams()[rank].Get()};
 
@@ -175,10 +173,10 @@ static FlashMlaInputData<SCALAR_T> ParseInputTensors(const std::vector<Tensor>& 
 
 template <typename SCALAR_T>
 static Status ApplyRoPE(SCALAR_T* q_ptr, SCALAR_T* k_ptr, const Tensor& rotary_pos, const Tensor& rotary_mask,
-                        int64_t prefill_token_count, cudaStream_t stream,
+                        int64_t total_q_tokens, cudaStream_t stream,
                         std::optional<llm_kernels::nvidia::RotaryEmbeddingCuda>& rotary_embedding_cuda, int n_heads,
                         int head_dim) {
-  if (!rotary_embedding_cuda.has_value() || prefill_token_count == 0 || rotary_pos.GetElementNumber() == 0) {
+  if (!rotary_embedding_cuda.has_value() || rotary_pos.GetElementNumber() == 0) {
     return Status(RET_RUNTIME_FAILED, "RoPE not initialized or invalid input");
   }
 
@@ -189,9 +187,9 @@ static Status ApplyRoPE(SCALAR_T* q_ptr, SCALAR_T* k_ptr, const Tensor& rotary_p
 
   rotary_embedding_cuda->SetInput(reinterpret_cast<int64_t*>(rotary_pos.template GetPtr<void>()),
                                   reinterpret_cast<int64_t*>(rotary_mask.template GetPtr<void>()),
-                                  q_rope_ptr,           // query: pointer to Q's rope portion (in-place)
-                                  k_rope_ptr,           // key: pointer to K's rope portion (in-place)
-                                  prefill_token_count,  // num_tokens: prefill token count
+                                  q_rope_ptr,      // query: pointer to Q's rope portion (in-place)
+                                  k_rope_ptr,      // key: pointer to K's rope portion (in-place)
+                                  total_q_tokens,  // num_tokens: prefill token count
                                   stream,
                                   n_heads * head_dim,  // query_stride: total elements per token for Q
                                   head_dim,            // key_stride: total elements per token for K
@@ -236,9 +234,11 @@ template <typename SCALAR_T>
 static Status QuantizeQK(SCALAR_T* q_ptr, SCALAR_T* k_ptr, FlashQuantWorkspace& workspace, size_t total_q_tokens,
                          cudaStream_t stream, int n_heads, int head_dim, int quant_block_size) {
   // Quantize Q: [total_q_tokens, n_heads, head_dim]
-  InvokePerTokenGroupQuantFp8E4m3<SCALAR_T>(q_ptr, workspace.q_fp8_ptr, workspace.q_scale_ptr, total_q_tokens * n_heads,
-                                            head_dim,
-                                            /*is_column_major=*/false, stream, quant_block_size);
+  if (q_ptr != nullptr) {
+    InvokePerTokenGroupQuantFp8E4m3<SCALAR_T>(q_ptr, workspace.q_fp8_ptr, workspace.q_scale_ptr,
+                                              total_q_tokens * n_heads, head_dim,
+                                              /*is_column_major=*/false, stream, quant_block_size);
+  }
 
   // Quantize K: [total_q_tokens, head_dim]
   InvokePerTokenGroupQuantFp8E4m3<SCALAR_T>(k_ptr, workspace.k_fp8_ptr, workspace.k_scale_ptr, total_q_tokens, head_dim,
@@ -264,7 +264,7 @@ static Status ApplyWeightScaling(SCALAR_T* weights_ptr, FlashQuantWorkspace& wor
 
 template <typename SCALAR_T>
 static Status StoreKVCache(const FlashMlaInputData<SCALAR_T>& input_data, FlashQuantWorkspace& workspace,
-                           int layer_index, int block_size, int head_dim) {
+                           int layer_index, int block_size, int head_dim, bool context_use_dsa) {
   // Store K/V to cache
   const size_t layer_block_num = input_data.indexer_kv_list_tensor.shape[1] / 2;
   const size_t row_stride = input_data.indexer_kv_list_tensor.shape[1];
@@ -291,12 +291,11 @@ static Status StoreKVCache(const FlashMlaInputData<SCALAR_T>& input_data, FlashQ
       reinterpret_cast<__nv_fp8_e4m3*>(workspace.k_fp8_ptr), workspace.k_scale_ptr, indexer_k_list, indexer_v_list,
       input_data.prefix_offsets_tensor.template GetPtr<size_t>(),
       input_data.without_prefix_offset_tensor.template GetPtr<size_t>(),
-      input_data.indexer_kv_cache_offset_tensor.template GetPtr<int>(), static_cast<int>(block_size),
-      input_data.batch_size, static_cast<int>(input_data.total_q_tokens), k_stride_size, v_stride_size,
-      input_data.stream));
+      input_data.indexer_kv_cache_offset_tensor.template GetPtr<int>(), block_size, input_data.batch_size,
+      static_cast<int>(input_data.total_q_tokens), k_stride_size, v_stride_size, input_data.stream));
   KLLM_LOG_DEBUG << "KV cache copy (new tokens) completed";
   // Step 2: If prefix cache exists, extract all KV (new + prefix) from cache blocks
-  if (input_data.total_prefix_tokens > 0) {
+  if (input_data.total_prefix_tokens > 0 && context_use_dsa) {
     const size_t total_tokens = input_data.total_q_tokens + input_data.total_prefix_tokens;
 
     KLLM_LOG_DEBUG << fmt::format(
@@ -307,8 +306,8 @@ static Status StoreKVCache(const FlashMlaInputData<SCALAR_T>& input_data, FlashQ
     CUDA_CHECK_LAST_ERROR(llm_kernels::nvidia::MlaIndexerKVReverseCacheCopy(
         reinterpret_cast<__nv_fp8_e4m3*>(workspace.k_fp8_ptr), workspace.k_scale_ptr, indexer_k_list, indexer_v_list,
         input_data.seq_len_offset_tensor.template GetPtr<size_t>(),  // seq_len_offset: ALL tokens cumsum
-        input_data.indexer_kv_cache_offset_tensor.template GetPtr<int>(), static_cast<int>(block_size),
-        input_data.batch_size, static_cast<int>(total_tokens), k_stride_size, v_stride_size, input_data.stream));
+        input_data.indexer_kv_cache_offset_tensor.template GetPtr<int>(), block_size, input_data.batch_size,
+        static_cast<int>(total_tokens), k_stride_size, v_stride_size, input_data.stream));
     KLLM_LOG_DEBUG << "All KV cache reverse copy (new + prefix) completed";
   }
   return Status();
@@ -317,7 +316,7 @@ static Status StoreKVCache(const FlashMlaInputData<SCALAR_T>& input_data, FlashQ
 template <typename SCALAR_T>
 static Status ComputeMqaLogits(const FlashMlaInputData<SCALAR_T>& input_data, FlashQuantWorkspace& workspace, int rank,
                                int n_heads, int head_dim, int total_tokens) {
-  const int seq_len = static_cast<int>(input_data.total_q_tokens);
+  const int seq_len = input_data.total_q_tokens;
   const int seq_len_kv = total_tokens;
 
   KLLM_CHECK_WITH_INFO(input_data.cur_seq_len_start_tensor != nullptr && input_data.cur_seq_len_end_tensor != nullptr,
@@ -406,17 +405,19 @@ Status FlashSparseMlaIndexerLayer::ForwardT(const std::vector<Tensor>& input_ten
   FlashMlaInputData<SCALAR_T> input_data = ParseInputTensors<SCALAR_T>(input_tensors, context_, rank_);
   Tensor& topk_indices = output_tensors[0];
 
-  KLLM_LOG_DEBUG << fmt::format(
-      "FlashSparseMlaIndexerLayer Forward: total_q_tokens={}, prefill_tokens={}, total_prefix_tokens={}",
-      input_data.total_q_tokens, input_data.prefill_token_count, input_data.total_prefix_tokens);
+  KLLM_LOG_DEBUG << fmt::format("FlashSparseMlaIndexerLayer Forward: total_q_tokens={}, total_prefix_tokens={}",
+                                input_data.total_q_tokens, input_data.total_prefix_tokens);
 
   // Get pointers
   SCALAR_T* q_ptr = input_data.q_tensor.template GetPtr<SCALAR_T>();
   SCALAR_T* k_ptr = input_data.k_tensor.template GetPtr<SCALAR_T>();
   SCALAR_T* weights_ptr = input_data.weights_tensor.template GetPtr<SCALAR_T>();
 
+  // When context_use_dsa is false, only the KV needs to be store
+  const bool context_use_dsa = (weights_ptr != nullptr);
+
   // Step 2: Apply RoPE to Q and K
-  ApplyRoPE<SCALAR_T>(q_ptr, k_ptr, input_data.rotary_pos, input_data.rotary_mask, input_data.prefill_token_count,
+  ApplyRoPE<SCALAR_T>(q_ptr, k_ptr, input_data.rotary_pos, input_data.rotary_mask, input_data.total_q_tokens,
                       input_data.stream, rotary_embedding_cuda_, n_heads_, head_dim_);
 
   // Step 3: Prepare workspace
@@ -426,21 +427,23 @@ Status FlashSparseMlaIndexerLayer::ForwardT(const std::vector<Tensor>& input_ten
                         workspace_buffer_->GetPtr<float>(), n_heads_, head_dim_, quant_block_size_, block_size_);
 
   // Step 4: Quantize Q/K
-  QuantizeQK<SCALAR_T>(q_ptr, k_ptr, workspace, input_data.total_q_tokens, input_data.stream, n_heads_, head_dim_,
-                       quant_block_size_);
+  QuantizeQK<SCALAR_T>(context_use_dsa ? q_ptr : nullptr, k_ptr, workspace, input_data.total_q_tokens,
+                       input_data.stream, n_heads_, head_dim_, quant_block_size_);
 
   // Step 5: Store KV to cache (only the storage part, quantization is already done)
-  StoreKVCache<SCALAR_T>(input_data, workspace, layer_index_, block_size_, head_dim_);
+  StoreKVCache<SCALAR_T>(input_data, workspace, layer_index_, block_size_, head_dim_, context_use_dsa);
 
-  // Step 6: Apply weight scaling
-  ApplyWeightScaling<SCALAR_T>(weights_ptr, workspace, input_data.total_q_tokens, input_data.stream, n_heads_,
-                               softmax_scale_);
+  if (context_use_dsa) {
+    // Step 6: Apply weight scaling
+    ApplyWeightScaling<SCALAR_T>(weights_ptr, workspace, input_data.total_q_tokens, input_data.stream, n_heads_,
+                                 softmax_scale_);
 
-  // Step 7: Compute MQA logits
-  ComputeMqaLogits<SCALAR_T>(input_data, workspace, rank_, n_heads_, head_dim_, total_tokens);
+    // Step 7: Compute MQA logits
+    ComputeMqaLogits<SCALAR_T>(input_data, workspace, rank_, n_heads_, head_dim_, total_tokens);
 
-  // Step 8: TopK selection
-  SelectTopK<SCALAR_T>(input_data, workspace, topk_indices, index_topk_);
+    // Step 8: TopK selection
+    SelectTopK<SCALAR_T>(input_data, workspace, topk_indices, index_topk_);
+  }
 
   return Status();
 }
