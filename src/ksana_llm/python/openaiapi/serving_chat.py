@@ -394,7 +394,8 @@ class KsanaOpenAIServingChat(KsanaOpenAIServing):
                             previous_token_lengths[i] = current_token_length
                         
                         full_text = self.tokenizer.decode(current_token_ids,
-                                                          skip_special_tokens=request.skip_special_tokens)
+                                                          skip_special_tokens=request.skip_special_tokens
+                                                         ).rstrip('\ufffd')
                         
                         delta_text = ""
                         prev_length = len(previous_texts[i])
@@ -600,15 +601,7 @@ class KsanaOpenAIServingChat(KsanaOpenAIServing):
                                     current_token_ids=current_token_ids,
                                     delta_token_ids=output_tokenids,
                                     request=request))
-                            # Check tool parser returned content length is abnormal
-                            if delta_message and delta_message.content:
-                                if output_tokenids:
-                                    recalculated_delta_text = self.tokenizer.decode(
-                                        list(output_tokenids), skip_special_tokens=request.skip_special_tokens)
-                                    if len(delta_message.content) > len(recalculated_delta_text):
-                                        delta_text = recalculated_delta_text
-                                        delta_message.content = recalculated_delta_text
-                            
+
                             # Post-process tool calls for streaming (DeltaToolCall)
                             if delta_message and delta_message.tool_calls:
                                 self.post_process_tool_calls(delta_message.tool_calls, history_tool_call_cnt)
@@ -942,7 +935,9 @@ class KsanaOpenAIServingChat(KsanaOpenAIServing):
                 for request_output in output.output_tokens:
                     output_tokens.extend(request_output)
                 logger.debug(f"output_tokens: {output_tokens}")
-                full_output_text = self.tokenizer.decode(output_tokens, skip_special_tokens=request.skip_special_tokens)
+                full_output_text = self.tokenizer.decode(output_tokens,
+                                                         skip_special_tokens=request.skip_special_tokens
+                                                        ).rstrip('\ufffd')
                 logger.debug(f"full_output_text: {full_output_text}")
                 finish_reason = "stop"
                 

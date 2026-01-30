@@ -37,6 +37,9 @@ class ToolParser:
         self.current_tool_name_sent: bool = False
         self.streamed_args_for_tool: list[str] = []
 
+        self.temp_text: str = ""
+        self.temp_tokens: Sequence[int] = []
+
         self.model_tokenizer = tokenizer
 
     @cached_property

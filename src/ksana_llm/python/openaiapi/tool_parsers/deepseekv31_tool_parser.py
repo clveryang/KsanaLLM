@@ -40,6 +40,8 @@ class DeepSeekV31ToolParser(ToolParser):
         self.tool_call_start_token: str = "<｜tool▁call▁begin｜>"
         self.tool_call_end_token: str = "<｜tool▁call▁end｜>"
 
+        self.tool_call_end_start_tokens: str = "<｜tool▁call▁end｜><｜tool▁call▁begin｜>"
+
         self.tool_call_regex = re.compile(
             r"<｜tool▁call▁begin｜>(?P<function_name>.*?)<｜tool▁sep｜>(?P<function_arguments>.*?)<｜tool▁call▁end｜>",
             re.DOTALL
@@ -74,6 +76,14 @@ class DeepSeekV31ToolParser(ToolParser):
                 "DeepSeek-V3.1 Tool parser could not locate tool call "
                 "start/end tokens in the tokenizer!"
             )
+
+    def extract_tool_start_ids(self, input_ids: Sequence[int]) -> Sequence[int]:
+
+        if self.tool_call_start_token_id not in input_ids:
+            return []
+        else:
+            return input_ids[input_ids.index(self.tool_call_start_token_id):]
+
 
     def extract_tool_calls(
         self,
@@ -132,6 +142,26 @@ class DeepSeekV31ToolParser(ToolParser):
         logger.debug("previous_text: %s", previous_text)
         logger.debug("delta_text: %s", delta_text)
         logger.debug("delta_token_ids: %s", delta_token_ids)
+        # preprocess to parser "xxx<｜tool▁call▁end｜><｜tool▁call▁begin｜>xxx" case
+        if self.temp_text:
+            logger.warning("temp_text found: %s", self.temp_text)
+            delta_text = self.temp_text + delta_text
+            delta_token_ids = self.temp_tokens + delta_token_ids
+            previous_token_ids = previous_token_ids[:-len(self.temp_tokens)]
+            self.temp_text = ""
+            self.temp_tokens = []
+        if self.tool_call_end_start_tokens in delta_text:
+            logger.warning("tool_call_end_start_tokens in delta_text: %s", delta_text)
+            parts = delta_text.split(self.tool_call_end_start_tokens)
+            first_text = parts[0] + self.tool_call_end_token
+            self.temp_text = delta_text[len(first_text):]
+            current_text = current_text[:-len(self.temp_text)]
+            delta_text = first_text
+            logger.warning("preprocessed delta_text: %s", delta_text)
+            self.temp_tokens = self.extract_tool_start_ids(delta_token_ids)
+            delta_token_ids = delta_token_ids[:-len(self.temp_tokens)]
+            current_token_ids = current_token_ids[:-len(self.temp_tokens)]
+
         # check to see if we should be streaming a tool call - is there a
         if self.tool_calls_start_token_id not in current_token_ids:
             logger.debug("No tool call tokens found!")
@@ -216,16 +246,25 @@ class DeepSeekV31ToolParser(ToolParser):
                 cur_tool_start_count == cur_tool_end_count
                 and cur_tool_end_count >= prev_tool_end_count
             ):
-                if self.prev_tool_call_arr is None or len(self.prev_tool_call_arr) == 0:
-                    # To parser "funtion_name<｜tool▁sep｜>function_args<｜tool▁call▁end｜>"
-                    # in one step.
+                # To parser "<｜tool▁call▁begin｜>funtion_name<｜tool▁sep｜>function_args<｜tool▁call▁end｜>"
+                # in one step.
+                if self.tool_call_start_token in delta_text:
+                    self.current_tool_id += 1
+                    self.current_tool_name_sent = False
+                    self.streamed_args_for_tool.append("")
+                    logger.warning("Starting on a new tool %s", self.current_tool_id)
+                # To parser "funtion_name<｜tool▁sep｜>function_args<｜tool▁call▁end｜>" in one step.
+                if self.prev_tool_call_arr is None or len(self.prev_tool_call_arr) < self.current_tool_id + 1:
                     if not self.streamed_args_for_tool[self.current_tool_id]:
                         logger.info("Last deal with tool_call_portion: %s", tool_call_portion)
                         current_tool_call_matches = self.stream_tool_call_portion_regex.match(
                             tool_call_portion
                         )
+                        current_tool_call = dict()
                         if current_tool_call_matches:
                             tool_name, tool_args = current_tool_call_matches.groups()
+                            current_tool_call["name"] = tool_name
+                            current_tool_call["arguments"] = tool_args
                         else:
                             logger.debug("Not enough token")
                             return None
@@ -258,6 +297,7 @@ class DeepSeekV31ToolParser(ToolParser):
                             )
                         logger.warning("Last delta args text delay out: %s", tool_args)
                         self.streamed_args_for_tool[self.current_tool_id] = tool_args
+                        self.prev_tool_call_arr.append(current_tool_call)
                         return last_delta
                     else:
                         logger.debug("attempting to close tool call, but no tool call")
@@ -370,7 +410,8 @@ class DeepSeekV31ToolParser(ToolParser):
             # if we're starting a new tool call, push an empty object in as
             #   a placeholder for the arguments
             if len(self.prev_tool_call_arr) <= self.current_tool_id:
-                self.prev_tool_call_arr.append({})
+                for _ in range(len(self.prev_tool_call_arr), self.current_tool_id + 1):
+                    self.prev_tool_call_arr.append({})
 
             # main logic for tool parsing here - compare prev. partially-parsed
             #   JSON to the current partially-parsed JSON

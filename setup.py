@@ -200,7 +200,8 @@ class BuildExt(build_ext_orig):
         # Copy deepseek-ai deepgemm package
         src_dir = build_temp / "third_party" / "DeepGEMM" / "deep_gemm"
         dst_dir = extdir.parent / "ksana_llm" / "deepseek_deep_gemm"
-        shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
+        if src_dir.exists():
+            shutil.copytree(src_dir, dst_dir, dirs_exist_ok=True)
 
     def copy_python_files_and_dirs(self, extdir, cwd, implemented_endpoints, endpoint_status):
         """

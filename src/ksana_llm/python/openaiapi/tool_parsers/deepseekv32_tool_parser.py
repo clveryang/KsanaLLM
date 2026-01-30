@@ -77,6 +77,7 @@ class DeepSeekV32ToolParser(ToolParser):
 
     def __init__(self, tokenizer: AnyTokenizer):
         super().__init__(tokenizer)
+        self.eos_token = "<｜end▁of▁sentence｜>"
         self.bot_token = "<｜DSML｜function_calls>"
         self.eot_token = "</｜DSML｜function_calls>"
         self.invoke_begin_regex = r'<｜DSML｜invoke\s+name="([^"]+)"\s*>'
@@ -140,6 +141,7 @@ class DeepSeekV32ToolParser(ToolParser):
         :return: ParseResult indicating success or failure, consumed text, leftover text, and parsed calls.
         """
         logger.debug(f"model_output: {model_output}")
+        model_output = model_output.replace(self.eos_token, "")
         idx = model_output.find(self.bot_token)
         normal_text = model_output[:idx].strip() if idx != -1 else model_output
         if self.bot_token not in model_output:
@@ -230,7 +232,7 @@ class DeepSeekV32ToolParser(ToolParser):
 
         if not has_tool_call and not potentially_dsml and not ends_with_prefix:
             self._buffer = ""
-            for e_token in [self.eot_token, self.invoke_end_token]:
+            for e_token in [self.eot_token, self.invoke_end_token, self.eos_token]:
                 if e_token in delta_text:
                     delta_text = delta_text.replace(e_token, "")
             return DeltaMessage(content=delta_text)
@@ -276,6 +278,7 @@ class DeepSeekV32ToolParser(ToolParser):
                     calls_for_this_invoke.append(
                         DeltaToolCall(
                             index=self.current_tool_id,
+                            type="function",
                             id=make_tool_call_id(),
                             function=DeltaFunctionCall(
                                 name=func_name,
