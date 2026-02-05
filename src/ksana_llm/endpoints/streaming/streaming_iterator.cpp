@@ -72,7 +72,12 @@ bool StreamingIterator::AddOutput(ksana_llm::KsanaPythonOutput& ksana_python_out
     const auto& output_tokens = std::get<0>(output);
     ksana_python_output.output_tokens.emplace_back(output_tokens.begin() + request_->input_tokens.size(),
                                                    output_tokens.end());
-    if (return_logprobs_) ksana_python_output.logprobs.push_back(std::get<1>(output));
+    if (return_logprobs_) {
+      ksana_python_output.logprobs.push_back(std::get<1>(output));
+    }
+  }
+  if (!request_->cache_stat.empty()) {
+    ksana_python_output.cache_stat = std::move(request_->cache_stat);
   }
   return true;
 }

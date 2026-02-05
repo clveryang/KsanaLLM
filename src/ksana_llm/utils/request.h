@@ -124,6 +124,9 @@ struct KsanaPythonInput {
   // The config of sampling.
   SamplingConfig sampling_config;
 
+  // If return cache hit status
+  bool return_cache_stat = false;
+
   // The tokens of this request.
   std::vector<int> input_tokens;
 
@@ -208,6 +211,13 @@ class Request {
   // Store token and their corresponding float probability values.
   std::vector<std::vector<std::pair<int, float>>>& logprobs;
 
+  // Store request cache hit status.
+  // Prefix cache: (prefix_len, prefix_len), hit [0, prefix_len)
+  // Flexible cache v1: (prefix_len, prefix_len + flexible_len), hit [prefix_len, prefix_len + flexible_len)
+  // Flexible cache v2: (start1, end1), (start2, end2), ..., hit [start1, end1), [start2, end2), ...
+  bool return_cache_stat;
+  std::vector<std::pair<size_t, size_t>> cache_stat;
+
   // The config of sampling.
   SamplingConfig sampling_config;
 
@@ -283,6 +293,9 @@ struct KsanaPythonOutput {
 
   // Store token and their corresponding float probability values.
   std::vector<std::vector<std::vector<std::pair<int, float>>>> logprobs;
+
+  // Store request cache hit status.
+  std::vector<std::pair<size_t, size_t>> cache_stat;
 
   // Embedding value for plugin output
   std::vector<std::vector<float>> embedding;

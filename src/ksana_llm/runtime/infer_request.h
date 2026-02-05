@@ -132,6 +132,8 @@ class InferRequest {
 
   void SetKvCachedTokenNum(size_t num);
 
+  void SetCacheHitStatus(size_t shared_token_num, bool is_first_prefill_step = true);
+
  public:
   // The req id of the user's request.
   int64_t req_id;
@@ -183,6 +185,13 @@ class InferRequest {
 
   // Store token and their corresponding float probability values.
   std::vector<std::vector<std::pair<int, float>>> &logprobs;
+
+  // Store request cache hit status.
+  // Prefix cache: (prefix_len, prefix_len), hit [0, prefix_len)
+  // Flexible cache v1: (prefix_len, prefix_len + flexible_len), hit [prefix_len, prefix_len + flexible_len)
+  // Flexible cache v2: (start1, end1), (start2, end2), ..., hit [start1, end1), [start2, end2), ...
+  bool return_cache_stat;
+  std::vector<std::pair<size_t, size_t>> &cache_stat;
 
   // The key is the request target, which can only be a predefined set of requestable targets {embedding_lookup,
   // layernorm, transformer, logits}.

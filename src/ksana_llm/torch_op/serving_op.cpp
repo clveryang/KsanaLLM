@@ -149,6 +149,7 @@ PYBIND11_MODULE(libtorch_serving, m) {
       .def(pybind11::init<>())
       .def_readwrite("model_name", &ksana_llm::KsanaPythonInput::model_name)
       .def_readwrite("sampling_config", &ksana_llm::KsanaPythonInput::sampling_config)
+      .def_readwrite("return_cache_stat", &ksana_llm::KsanaPythonInput::return_cache_stat)
       .def_readwrite("input_tokens", &ksana_llm::KsanaPythonInput::input_tokens)
       .def_readwrite("request_target", &ksana_llm::KsanaPythonInput::request_target)
       .def_readwrite("input_refit_embedding", &ksana_llm::KsanaPythonInput::input_refit_embedding)
@@ -169,6 +170,7 @@ PYBIND11_MODULE(libtorch_serving, m) {
       .def_readwrite("input_tokens", &ksana_llm::KsanaPythonOutput::input_tokens)
       .def_readwrite("output_tokens", &ksana_llm::KsanaPythonOutput::output_tokens)
       .def_readwrite("logprobs", &ksana_llm::KsanaPythonOutput::logprobs)
+      .def_readwrite("cache_stat", &ksana_llm::KsanaPythonOutput::cache_stat)
       .def_readwrite("response", &ksana_llm::KsanaPythonOutput::response)
       .def_readwrite("embedding", &ksana_llm::KsanaPythonOutput::embedding)
       .def_readwrite("finish_status", &ksana_llm::KsanaPythonOutput::finish_status);

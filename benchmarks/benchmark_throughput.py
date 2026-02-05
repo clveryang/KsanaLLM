@@ -357,6 +357,13 @@ def args_config():
                         default=0,
                         help="Whether to return log probabilities of the output tokens"
                              " or not. ")
+    parser.add_argument('--cache_stat',
+                        action="store_true",
+                        help="Whether to return cache hit status of the request.")
+    parser.add_argument('--cache_stat_csv',
+                        type=str,
+                        default=None,
+                        help="cache hit status output csv file path.")
     parser.add_argument('--stop_token_ids',
                         nargs='*',
                         type=int,
@@ -434,6 +441,10 @@ def args_config():
         print("Note: When --enable_diff_check is set and --repeat_num_iters is less than 2, "
               "--repeat_num_iters is set to 2.")
         args.repeat_num_iters = 2
+
+    if args.cache_stat_csv is not None:
+        args.cache_stat = True
+
     return args
 
 
@@ -546,6 +557,7 @@ def construct_request_data(tokenizer: Union[None, AutoTokenizer], prompt: str,
             "stream": args.stream,
             "model_type": args.model_type,
             "use_chat_template": args.chat_template,
+            "cache_stat": args.cache_stat,
         }
         if input_tokens:
             data["input_tokens"] = input_tokens
@@ -815,8 +827,8 @@ async def send_grpc_request_async(
 
 
 async def send_request_async(args: argparse.Namespace, prompt: int,
-                             req_data: bytes, api_url: str,
-                             req_id: int, result_list: List, pbar: tqdm,
+                             req_data: bytes, api_url: str, req_id: int,
+                             result_list: List, cache_stat_list: List, pbar: tqdm,
                              tokenizer: Union[None, AutoTokenizer], max_retries=3):
     headers = {
         "User-Agent": "Benchmark Client",
@@ -906,6 +918,7 @@ async def send_request_async(args: argparse.Namespace, prompt: int,
     out_tokens = None
     in_tokens = None
     show_tokens = False
+    cache_stat = None
 
     server_map_idx = "delta" if args.stream else "message"
     if args.backend == "ksana":
@@ -913,6 +926,8 @@ async def send_request_async(args: argparse.Namespace, prompt: int,
         if show_tokens:
             out_tokens = output.get("output_token_ids", [""])[0]
             in_tokens = output.get("input_token_ids", "")
+        if args.cache_stat:
+            cache_stat = output.get("cache_stat", "")
     elif args.backend == "trt-llm":
         prompt_len = len(prompt)
         output_text = output.get("text_output", "").strip()
@@ -960,12 +975,21 @@ async def send_request_async(args: argparse.Namespace, prompt: int,
 
     output_len = len(output_text)
     result_list[req_id] = output_text
+    if args.cache_stat_csv is not None:
+        cache_stat_list[req_id] = cache_stat
     print(
         "req_id : {} input_token_num={}, output_token_num={}, output_text_len={}, output_text=\n{}"
         .format(req_id, input_token_num, output_token_num, output_len,
                 output_text))
     if show_tokens:
         print(f"input_tokens: {in_tokens}, output_tokens: {out_tokens}")
+    if cache_stat is not None:
+        from cache_stat_visualizer import calculate_cache_stats
+        stats = calculate_cache_stats(cache_stat, input_token_num)
+        print(f"cache_stat: {cache_stat} | "
+              f"prefix: {stats['prefix_tokens']} tokens, "
+              f"flexible: {stats['flexible_tokens']} tokens, "
+              f"total_hit: {stats['total_hit_ratio']:.1f}%")
 
     REQUEST_LATENCY.append(
         (len(prompt), output_len if output_len > 0 else 1, input_token_num,
@@ -983,6 +1007,8 @@ async def benchmark_async(args: argparse.Namespace, api_url: str,
     pbar = tqdm(total=len(inputs))
     # Initialize a result list with empty strings, one for each input
     result_list = [""] * len(inputs)
+    # Initialize a list of cache hit status
+    cache_stat_list = [None] * len(inputs)
     # Asynchronously generate req_datas with the specified request rate
     async for req_id, (prompt, req_data) in generate_req_data_async(inputs,
                                                                     args.request_rate,
@@ -1000,8 +1026,8 @@ async def benchmark_async(args: argparse.Namespace, api_url: str,
         else:
             # Create an asynchronous task to send the request
             task = asyncio.create_task(
-                send_request_async(args, prompt, req_data, api_url, req_id, result_list, pbar,
-                                tokenizer))
+                send_request_async(args, prompt, req_data, api_url, req_id, result_list,
+                                   cache_stat_list, pbar, tokenizer))
         # Add the task to the list of tasks
         tasks.append(task)
     # Wait for all tasks to complete
@@ -1011,7 +1037,7 @@ async def benchmark_async(args: argparse.Namespace, api_url: str,
     # Close the progress bar
     pbar.close()
     # Return the result list
-    return result_list
+    return result_list, cache_stat_list
 
 
 async def benchmark_sync(args: argparse.Namespace, api_url: str,
@@ -1020,17 +1046,19 @@ async def benchmark_sync(args: argparse.Namespace, api_url: str,
     pbar = tqdm(total=len(inputs))
     # Initialize a result list with empty strings, one for each input
     result_list = [""] * len(inputs)
+    # Initialize a list of cache hit status
+    cache_stat_list = [None] * len(inputs)
     # Asynchronously generate req_datas with the specified request rate
     async for req_id, (prompt, req_data) in generate_req_data_async(inputs, args.request_rate,
                                                                     args.concurrency,
                                                                     args.random):
         # Await until last request finished
-        await send_request_async(args, prompt, req_data, api_url, req_id, result_list, pbar,
-                                 tokenizer)
+        await send_request_async(args, prompt, req_data, api_url, req_id, result_list,
+                                 cache_stat_list, pbar, tokenizer)
     # Close the progress bar
     pbar.close()
     # Return the result list
-    return result_list
+    return result_list, cache_stat_list
 
 
 def adjust_list_length(inputs: List[str], args: argparse.Namespace):
@@ -1182,10 +1210,13 @@ def main(args: argparse.Namespace):
 
         # Record the start time of the benchmark
         all_result_list = []
+        all_cache_stat_list = []
         benchmark_start_time = time.perf_counter()
         for iter in range(args.repeat_num_iters):
             print(f"Start profile iteration {iter} with request rate {metrics.request_rate:.3f}")
-            all_result_list.append(run_benchmark(args, api_url, inputs, tokenizer))
+            result_list, cache_stat_list = run_benchmark(args, api_url, inputs, tokenizer)
+            all_result_list.append(result_list)
+            all_cache_stat_list.append(cache_stat_list)
         # Record the end time of the benchmark
         benchmark_end_time = time.perf_counter()
         
@@ -1313,6 +1344,25 @@ def main(args: argparse.Namespace):
                 if args.stream:
                     process_metrics(stream_metrics.__dict__.values(), row)
                 writer.writerow(row)
+
+    if args.cache_stat_csv is not None:
+        cache_stat_list = all_cache_stat_list[-1]
+        with open(args.cache_stat_csv, "w", newline='') as fs:
+            writer = csv.writer(fs)
+            # Write visualization command as header for user reference
+            viz_cmd = (f"python cache_stat_visualizer.py --input_csv {args.dataset_path} "
+                       f"--cache_stat_csv {args.cache_stat_csv} --model_type {args.model_type} "
+                       f"--tokenizer_path <YOUR_TOKENIZER_PATH>")
+            writer.writerow([viz_cmd])
+            for idx in range(len(cache_stat_list)):
+                cache_stat = cache_stat_list[idx]
+                # cache_stat is List[Tuple[int, int]]
+                if cache_stat is None or len(cache_stat) == 0:
+                    writer.writerow(["[]"])
+                else:
+                    # cache_stat in format of [(start1, end1), (start2, end2), ...]
+                    writer.writerow([cache_stat])
+        print(f"\nCache hit status saved. To visualize run:\n{viz_cmd}")
 
 
 if __name__ == "__main__":

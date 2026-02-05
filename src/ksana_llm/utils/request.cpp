@@ -48,6 +48,8 @@ Request::Request(const std::shared_ptr<KsanaPythonInput>& ksana_python_input,
       beam_search_group(),
       output_tokens(std::get<0>(output_group[0])),
       logprobs(std::get<1>(output_group[0])),
+      return_cache_stat(ksana_python_input->return_cache_stat),
+      cache_stat(),
       sampling_config(ksana_python_input->sampling_config),
       waiter(nullptr),
       step_waiter(nullptr),
@@ -102,6 +104,9 @@ KsanaPythonOutput::KsanaPythonOutput(std::shared_ptr<Request> req) {
     if (req->sampling_config.logprobs_num > 0 || req->input_top_logprobs_num > 0) {
       logprobs.emplace_back(req_logprobs);
     }
+  }
+  if (req->return_cache_stat) {
+    cache_stat = req->cache_stat;
   }
   response = std::move(req->response);
 }

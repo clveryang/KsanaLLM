@@ -274,7 +274,11 @@ TEST_F(BatchSchedulerTest, FlexibleCacheTaskTest) {
   tester.InitRequestInfoListByDefault(req_list);
   const auto& req_0 = req_list[0].infer_req_group[0];
   req_0->input_tokens.assign(input_tokens.begin(), input_tokens.end());
+  req_0->return_cache_stat = true;
   tester.DoParallelRequestAndCheck(client_num, req_list, hooks);
+
+  std::vector<std::pair<size_t, size_t>> cache_stat_0{{0, 0}};
+  EXPECT_EQ(req_0->cache_stat, cache_stat_0);
 
   req_list.clear();
   tester.GenerateRequests(request_num, 1, max_expect_output_num, input_num, input_num + 1, req_list);
@@ -282,9 +286,16 @@ TEST_F(BatchSchedulerTest, FlexibleCacheTaskTest) {
   const auto& req_1 = req_list[0].infer_req_group[0];
   req_1->input_tokens.assign(input_tokens.begin(), input_tokens.end());
   req_1->input_tokens.erase(req_1->input_tokens.begin() + del_token_idx);
+  req_1->return_cache_stat = true;
   tester.DoParallelRequestAndCheck(client_num, req_list, hooks);
 
-  EXPECT_EQ(req_1->flexible_cache_len, 257);
+  size_t prefix_tokens =
+      DivRoundDown(del_token_idx, cache_manager_config.block_token_num) * cache_manager_config.block_token_num;
+  size_t flexible_tokens = input_num - /* del token */ 1 - prefix_tokens - cache_manager_config.block_token_num;
+  EXPECT_EQ(req_1->flexible_cache_len, flexible_tokens);
+  std::vector<std::pair<size_t, size_t>> cache_stat_1{{prefix_tokens, prefix_tokens},
+                                                      {prefix_tokens, prefix_tokens + flexible_tokens}};
+  EXPECT_EQ(req_1->cache_stat, cache_stat_1);
 }
 
 TEST_F(BatchSchedulerTest, CreateMockRequest) {

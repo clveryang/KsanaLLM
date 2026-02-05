@@ -25,6 +25,8 @@ InferRequest::InferRequest(std::shared_ptr<Request> &request, const int index)
       input_refit_embedding(request->input_refit_embedding),
       output_tokens(std::get<0>(request->output_group[index])),
       logprobs(std::get<1>(request->output_group[index])),
+      return_cache_stat(request->return_cache_stat),
+      cache_stat(request->cache_stat),
       request_target(request->request_target),
       response(request->response),
       cumulative_score(0),
@@ -138,6 +140,37 @@ size_t InferRequest::GetPlanningSamplingTokenNum() const { return planning_workl
 void InferRequest::SetKvCachedTokenNum(size_t num) {
   kv_cached_token_num = num;
   prefix_cache_len = num;
+}
+
+void InferRequest::SetCacheHitStatus(size_t shared_token_num, bool is_first_prefill_step) {
+  if (!return_cache_stat || infer_stage != InferStage::kContext || !is_first_prefill_step) {
+    return;
+  }
+
+  cache_stat.clear();
+  cache_stat.emplace_back(shared_token_num, shared_token_num);
+
+  // return if not flexible cached
+  if (flexible_cached_copy_tasks.empty()) {
+    return;
+  }
+
+  std::set<int> flexible_cached_token_idx;
+  for (const auto &task : flexible_cached_copy_tasks) {
+    flexible_cached_token_idx.insert(task.dst_token_idx_);
+  }
+
+  int start = *flexible_cached_token_idx.begin();
+  int prev = start;
+  for (auto it = std::next(flexible_cached_token_idx.begin()); it != flexible_cached_token_idx.end(); ++it) {
+    int curr = *it;
+    if (curr != prev + 1) {
+      cache_stat.emplace_back(start, prev + 1);
+      start = curr;
+    }
+    prev = curr;
+  }
+  cache_stat.emplace_back(start, prev + 1);
 }
 
 void InferRequest::NotifyStep() {

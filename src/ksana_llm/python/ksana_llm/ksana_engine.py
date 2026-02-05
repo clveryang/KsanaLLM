@@ -265,6 +265,7 @@ class KsanaLLMEngine:
         # Create a KsanaPythonInput object
         ksana_python_input = libtorch_serving.KsanaPythonInput()
         ksana_python_input.model_name = request_dict.pop("model_name", "")
+        ksana_python_input.return_cache_stat = request_dict.pop("cache_stat", False)
 
         # Set input tokens to the ksana_python_input
         if input_tokens is not None:

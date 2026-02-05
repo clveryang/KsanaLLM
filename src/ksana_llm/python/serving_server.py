@@ -135,6 +135,7 @@ class LLMServer:
                     "output_token_ids": output_token_ids,  # the output token IDs
                     "logprobs": ksana_python_output.logprobs,
                     "input_token_ids": input_token_ids,  # the input token IDs
+                    "cache_stat": ksana_python_output.cache_stat,
                 }
                 yield orjson.dumps(ret) + b"\0"
 
@@ -158,6 +159,7 @@ class LLMServer:
             "output_token_ids": ksana_python_output.output_tokens,  # the generated token IDs
             "logprobs": ksana_python_output.logprobs,
             "input_token_ids": ksana_python_output.input_tokens,  # the input token IDs
+            "cache_stat": ksana_python_output.cache_stat,
         }
 
 

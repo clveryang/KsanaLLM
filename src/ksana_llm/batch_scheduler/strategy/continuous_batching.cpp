@@ -680,6 +680,7 @@ void ContinuousBatchingStrategy::ProcessWaitingQueue() {
       continue;
     }
 
+    bool is_first_prefill_step = true;
     bool is_last_prefill_step = true;
     size_t req_step_block_num = 0;  // block number to be allocated in this step
     size_t shared_token_num = 0;
@@ -699,6 +700,7 @@ void ContinuousBatchingStrategy::ProcessWaitingQueue() {
       }
     } else {
       // Last task is chunked prefill task, previous tokens are sharable
+      is_first_prefill_step = false;
       shared_token_num = planning_workload.prefill_start_offset;
     }
 
@@ -813,6 +815,8 @@ void ContinuousBatchingStrategy::ProcessWaitingQueue() {
           REPORT_COUNTER("flexible_cache_hit_req_num", static_cast<size_t>(1));
           REPORT_COUNTER("flexible_cache_hit_token_num", req->flexible_cached_copy_tasks.size());
         }
+
+        req->SetCacheHitStatus(shared_token_num, is_first_prefill_step);
 
         continue;
       } else {
