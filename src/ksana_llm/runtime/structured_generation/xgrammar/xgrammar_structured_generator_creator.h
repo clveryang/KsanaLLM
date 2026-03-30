@@ -14,9 +14,10 @@ namespace ksana_llm {
  */
 class GrammarGeneratorCreator : public GeneratorCreator {
  public:
-  GrammarGeneratorCreator(std::vector<std::string>& vocab, int vocab_size, std::vector<int>& stop_token_ids) {
+  GrammarGeneratorCreator(const std::vector<std::string>& vocab, int vocab_size, const std::vector<int>& stop_token_ids,
+                          int vocab_type = 0, bool add_prefix_space = false) {
     try {
-      grammar_backend_ = GrammarBackend::Create(vocab, vocab_size, stop_token_ids);
+      grammar_backend_ = GrammarBackend::Create(vocab, vocab_size, stop_token_ids, vocab_type, add_prefix_space);
     } catch (const std::exception& e) {
       throw std::runtime_error("Grammar backend creation failed: " + std::string(e.what()));
     }

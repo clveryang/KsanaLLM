@@ -30,11 +30,11 @@ class GrammarBackend {
   virtual const xgrammar::TokenizerInfo& GetTokenizerInfo() const = 0;
   virtual bool IsInitialized() const = 0;
 
-  // Factory method to create appropriate backend implementation
-  // Returns nullptr if creation fails.
-  static std::unique_ptr<GrammarBackend> Create(const std::vector<std::string>& vocab,
-                                                int vocab_size,
-                                                const std::vector<int>& stop_token_ids);
+  // Factory method to create appropriate backend implementation.
+  // vocab_type: 0 = RAW, 1 = BYTE_FALLBACK, 2 = BYTE_LEVEL (detected by Python side)
+  static std::unique_ptr<GrammarBackend> Create(const std::vector<std::string>& vocab, int vocab_size,
+                                                const std::vector<int>& stop_token_ids, int vocab_type = 0,
+                                                bool add_prefix_space = false);
 
  protected:
   mutable std::mutex mutex_;

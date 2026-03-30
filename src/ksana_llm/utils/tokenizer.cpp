@@ -3,6 +3,8 @@
 
 #include "ksana_llm/utils/tokenizer.h"
 
+#include <xgrammar/xgrammar.h>
+
 #include "ksana_llm/utils/environment.h"
 #include "ksana_llm/utils/logger.h"
 #include "ksana_llm/utils/singleton.h"
@@ -44,7 +46,8 @@ Status Tokenizer::Encode(const std::string& prompt, std::vector<int>& input_toke
   return Status();
 }
 
-Status Tokenizer::GetVocabInfo(std::vector<std::string>& vocab, int& vocab_size, std::vector<int>& stop_token_ids) {
+Status Tokenizer::GetVocabInfo(std::vector<std::string>& vocab, int& vocab_size, std::vector<int>& stop_token_ids,
+                               int& vocab_type, bool& add_prefix_space) {
   // Ref: https://github.com/mlc-ai/xgrammar/blob/v0.1.21/python/xgrammar/tokenizer_info.py#L146
   try {
     pybind11::gil_scoped_acquire acquire;
@@ -83,13 +86,83 @@ Status Tokenizer::GetVocabInfo(std::vector<std::string>& vocab, int& vocab_size,
       }
     }
 
+    // Detect vocab_type and add_prefix_space from tokenizer attributes.
+    // All detection is done here in Python side — C++ receives the final values directly.
+    //
+    // Detection:
+    //   1. PreTrainedTokenizerFast → parse backend_tokenizer JSON via XGrammar C++ API
+    //   2. byte_encoder attribute → BYTE_LEVEL(2) (GPT-2 / tiktoken + bytes_to_unicode)
+    //   3. sp_model attribute + "<0x0A>" in vocab → BYTE_FALLBACK(1) (SentencePiece)
+    //   4. Default → RAW(0)
+    vocab_type = static_cast<int>(xgrammar::VocabType::RAW);
+    add_prefix_space = false;
+
+    py::module transformers = py::module::import("transformers");
+    py::object fast_tokenizer_class = transformers.attr("PreTrainedTokenizerFast");
+
+    if (py::isinstance(tokenizer_, fast_tokenizer_class)) {
+      // Fast tokenizer: parse tokenizer.json via XGrammar DetectMetadataFromHF
+      pybind11::object backend_tokenizer = tokenizer_.attr("backend_tokenizer");
+      std::string backend_str = backend_tokenizer.attr("to_str")().cast<std::string>();
+      std::string metadata = xgrammar::TokenizerInfo::DetectMetadataFromHF(backend_str);
+      KLLM_LOG_INFO << "XGrammar detected metadata: " << metadata;
+
+      // Parse metadata JSON: {"vocab_type": N, "add_prefix_space": bool}
+      // e.g. {"vocab_type": 2, "add_prefix_space": false} for BYTE_LEVEL
+      size_t vt_pos = metadata.find("\"vocab_type\":");
+      if (vt_pos != std::string::npos) {
+        size_t start = metadata.find_first_of("0123456789", vt_pos);
+        if (start != std::string::npos) {
+          vocab_type = std::stoi(metadata.substr(start));
+        }
+      }
+      size_t aps_pos = metadata.find("\"add_prefix_space\":");
+      if (aps_pos != std::string::npos) {
+        add_prefix_space = (metadata.find("true", aps_pos) != std::string::npos);
+      }
+      KLLM_LOG_INFO << "Fast tokenizer detected: vocab_type=" << vocab_type
+                    << ", add_prefix_space=" << add_prefix_space;
+    } else if (py::hasattr(tokenizer_, "byte_encoder")) {
+      // GPT-2 style bytes_to_unicode mapping → BYTE_LEVEL
+      // e.g. TikTokenTokenizer (Kimi K2), GPT2Tokenizer
+      vocab_type = static_cast<int>(xgrammar::VocabType::BYTE_LEVEL);
+      KLLM_LOG_INFO << "Detected byte_encoder attribute, vocab_type=BYTE_LEVEL";
+    } else {
+      // Check SentencePiece: tokenizer.sp_model / tokenizer.tokenizer.sp_model
+      bool has_sp_model = py::hasattr(tokenizer_, "sp_model");
+      if (!has_sp_model && py::hasattr(tokenizer_, "tokenizer")) {
+        has_sp_model = py::hasattr(tokenizer_.attr("tokenizer"), "sp_model");
+      }
+
+      if (has_sp_model) {
+        // Confirm byte fallback by checking vocab for "<0x0A>" (byte fallback of '\n')
+        if (vocab_dict.contains("<0x0A>")) {
+          vocab_type = static_cast<int>(xgrammar::VocabType::BYTE_FALLBACK);
+          // Detect add_prefix_space from tokenizer attribute; default to true for
+          // compatibility with LLaMA/Mistral (matching XGrammar Python behavior).
+          add_prefix_space = true;
+          if (py::hasattr(tokenizer_, "add_prefix_space")) {
+            py::object aps = tokenizer_.attr("add_prefix_space");
+            if (!aps.is_none()) {
+              add_prefix_space = aps.cast<bool>();
+            }
+          }
+          KLLM_LOG_INFO << "Detected sp_model + <0x0A> in vocab, vocab_type=BYTE_FALLBACK"
+                        << ", add_prefix_space=" << add_prefix_space;
+        } else {
+          KLLM_LOG_INFO << "Detected sp_model but no byte fallback tokens, vocab_type=RAW(0)";
+        }
+      }
+    }
+
     // Update vocab_size to the final calculated value
     vocab_size = final_vocab_size;
 
     KLLM_LOG_INFO << "Extracted tokenizer info: input_vocab_size=" << vocab_size
                   << ", tokenizer_vocab_size=" << tokenizer_vocab_size << ", final_vocab_size=" << final_vocab_size
                   << ", vocab_dict_size=" << vocab_dict.size() << ", max_token_id=" << max_id
-                  << ", stop_tokens=" << stop_token_ids.size();
+                  << ", stop_tokens=" << stop_token_ids.size() << ", vocab_type=" << vocab_type
+                  << ", add_prefix_space=" << add_prefix_space;
 
     return Status();
   } catch (const std::exception& e) {

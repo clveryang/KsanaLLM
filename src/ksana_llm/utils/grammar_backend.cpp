@@ -6,18 +6,15 @@
 #include "ksana_llm/utils/device_types.h"
 
 #include "ksana_llm/utils/nvidia/grammar_backend_nvidia.h"
-// Note: Ascend header removed since we return nullptr for Ascend platform
-// #include "ksana_llm/utils/ascend/grammar_backend_ascend.h"
 
 namespace ksana_llm {
 
-std::unique_ptr<GrammarBackend> GrammarBackend::Create(const std::vector<std::string>& vocab,
-                                                       int vocab_size,
-                                                       const std::vector<int>& stop_token_ids) {
+std::unique_ptr<GrammarBackend> GrammarBackend::Create(const std::vector<std::string>& vocab, int vocab_size,
+                                                       const std::vector<int>& stop_token_ids, int vocab_type,
+                                                       bool add_prefix_space) {
   if (ACTIVE_DEVICE_TYPE == DEVICE_TYPE_NVIDIA) {
-    return std::make_unique<GrammarBackendNvidia>(vocab, vocab_size, stop_token_ids);
+    return std::make_unique<GrammarBackendNvidia>(vocab, vocab_size, stop_token_ids, vocab_type, add_prefix_space);
   } else {
-    // Ascend platform does not support grammar backend yet
     KLLM_LOG_WARNING << "GrammarBackend is not supported on Ascend platforms, returning nullptr";
     return nullptr;
   }

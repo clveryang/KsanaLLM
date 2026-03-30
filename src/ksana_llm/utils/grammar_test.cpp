@@ -14,11 +14,8 @@ class GrammarBackendTest : public testing::Test {
  protected:
   void SetUp() override {
     // 创建一个简单的词汇表
-    vocab_ = {
-        "hello", "world", "test", "json", "name", "age", "value",
-        "\"", ":", ",", "{", "}", "[", "]", " ", "\n", "\t",
-        "true", "false", "null", "123", "456", "abc", "def"
-    };
+    vocab_ = {"hello", "world", "test", "json", "name", "age",  "value", "\"",   ":",   ",",   "{",   "}",
+              "[",     "]",     " ",    "\n",   "\t",   "true", "false", "null", "123", "456", "abc", "def"};
     vocab_size_ = vocab_.size();
 
     // 设置停止token ID
@@ -32,9 +29,7 @@ class GrammarBackendTest : public testing::Test {
     }
   }
 
-  void TearDown() override {
-    grammar_backend_.reset();
-  }
+  void TearDown() override { grammar_backend_.reset(); }
 
   std::vector<std::string> vocab_;
   int vocab_size_;
@@ -145,10 +140,10 @@ TEST_F(GrammarBackendTest, MatcherTokenAcceptanceTest) {
 
   // 尝试接受一些token（具体的token ID取决于词汇表）
   bool accepted1 = matcher->AcceptToken(10);  // "{"
-  EXPECT_TRUE(accepted1 || !accepted1);  // 无论结果如何都是有效的
+  EXPECT_TRUE(accepted1 || !accepted1);       // 无论结果如何都是有效的
 
-  bool accepted2 = matcher->AcceptToken(4);   // "name"
-  EXPECT_TRUE(accepted2 || !accepted2);  // 无论结果如何都是有效的
+  bool accepted2 = matcher->AcceptToken(4);  // "name"
+  EXPECT_TRUE(accepted2 || !accepted2);      // 无论结果如何都是有效的
 
   // 检查是否终止
   bool terminated = matcher->IsTerminated();
@@ -261,9 +256,7 @@ TEST_F(GrammarBackendTest, InvalidSchemaTest) {
   std::string invalid_schema = "{ invalid json schema }";
 
   // 这应该抛出异常或返回nullptr
-  EXPECT_THROW({
-    auto compiled_grammar = grammar_backend_->CompileJSONSchema(invalid_schema);
-  }, std::exception);
+  EXPECT_THROW({ auto compiled_grammar = grammar_backend_->CompileJSONSchema(invalid_schema); }, std::exception);
 #else
   GTEST_SKIP() << "Invalid schema test is not supported on non-CUDA platforms";
 #endif
@@ -399,9 +392,9 @@ TEST_F(GrammarBackendTest, GrammarMatcherNvidiaNullptrTest) {
   bool terminated_normal = matcher->IsTerminated();
 
   // 正常情况下的结果应该是有意义的
-  EXPECT_TRUE(fill_result_normal || !fill_result_normal);  // 任何结果都是有效的
+  EXPECT_TRUE(fill_result_normal || !fill_result_normal);      // 任何结果都是有效的
   EXPECT_TRUE(accept_result_normal || !accept_result_normal);  // 任何结果都是有效的
-  EXPECT_TRUE(terminated_normal || !terminated_normal);  // 任何结果都是有效的
+  EXPECT_TRUE(terminated_normal || !terminated_normal);        // 任何结果都是有效的
 
   // 2. 测试 nullptr bitmask_data 的情况（这会触发不同的错误处理路径）
   bool fill_result_null = matcher->FillNextTokenBitmask(nullptr, 0);
@@ -426,19 +419,20 @@ TEST_F(GrammarBackendTest, DetectTokenizerTypeTest) {
   Status status = tokenizer->InitTokenizer(model_path);
 
   if (!status.OK()) {
-    GTEST_SKIP() << "Failed to initialize tokenizer from " << model_path
-                 << ", skipping DetectTokenizerType test";
+    GTEST_SKIP() << "Failed to initialize tokenizer from " << model_path << ", skipping DetectTokenizerType test";
   }
 
   // 获取 vocab 信息
   std::vector<std::string> vocab;
   int vocab_size = 32000;
   std::vector<int> stop_token_ids;
-  status = tokenizer->GetVocabInfo(vocab, vocab_size, stop_token_ids);
+  int vocab_type = 0;
+  bool add_prefix_space = false;
+  status = tokenizer->GetVocabInfo(vocab, vocab_size, stop_token_ids, vocab_type, add_prefix_space);
   ASSERT_TRUE(status.OK()) << "Failed to get vocab info";
 
-  // 创建 GrammarBackend，这会触发 DetectTokenizerType
-  auto backend = GrammarBackend::Create(vocab, vocab_size, stop_token_ids);
+  // 创建 GrammarBackend
+  auto backend = GrammarBackend::Create(vocab, vocab_size, stop_token_ids, vocab_type, add_prefix_space);
   ASSERT_NE(backend, nullptr) << "Failed to create GrammarBackend";
   ASSERT_TRUE(backend->IsInitialized()) << "GrammarBackend not initialized";
 
@@ -450,14 +444,14 @@ TEST_F(GrammarBackendTest, DetectTokenizerTypeTest) {
   // - RAW = 0
   // - BYTE_FALLBACK = 1
   // - BYTE_LEVEL = 2
-  auto vocab_type = tokenizer_info.GetVocabType();
+  auto detected_vocab_type = tokenizer_info.GetVocabType();
 
-  KLLM_LOG_INFO << "Detected vocab_type: " << static_cast<int>(vocab_type);
+  KLLM_LOG_INFO << "Detected vocab_type: " << static_cast<int>(detected_vocab_type);
 
   // Llama 模型应该被检测为 BYTE_FALLBACK
-  EXPECT_EQ(vocab_type, xgrammar::VocabType::BYTE_FALLBACK)
+  EXPECT_EQ(detected_vocab_type, xgrammar::VocabType::BYTE_FALLBACK)
       << "Expected BYTE_FALLBACK for Llama model with ByteFallback decoder, got "
-      << static_cast<int>(vocab_type);
+      << static_cast<int>(detected_vocab_type);
 
   EXPECT_EQ(tokenizer_info.GetVocabSize(), vocab_size);
 
@@ -486,14 +480,13 @@ TEST_F(GrammarBackendTest, DetectTokenizerTypeWithoutInitializationTest) {
 
   // 获取 TokenizerInfo
   const auto& tokenizer_info = backend->GetTokenizerInfo();
-  auto vocab_type = tokenizer_info.GetVocabType();
+  auto detected_vocab_type = tokenizer_info.GetVocabType();
 
-  KLLM_LOG_INFO << "Detected vocab_type (without tokenizer): " << static_cast<int>(vocab_type);
+  KLLM_LOG_INFO << "Detected vocab_type (without tokenizer): " << static_cast<int>(detected_vocab_type);
 
   // 没有初始化 tokenizer 时，应该使用默认值 RAW (0)
-  EXPECT_EQ(vocab_type, xgrammar::VocabType::RAW)
-      << "Expected RAW when tokenizer is not initialized, got "
-      << static_cast<int>(vocab_type);
+  EXPECT_EQ(detected_vocab_type, xgrammar::VocabType::RAW)
+      << "Expected RAW when tokenizer is not initialized, got " << static_cast<int>(detected_vocab_type);
 
   EXPECT_EQ(tokenizer_info.GetVocabSize(), simple_vocab_size);
 #else

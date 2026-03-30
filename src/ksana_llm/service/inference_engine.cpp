@@ -292,15 +292,17 @@ Status InferenceEngine::Initialize() {
     std::vector<std::string> vocab;
     int vocab_size = static_cast<int>(model_config.vocab_size);
     std::vector<int> stop_token_ids;
+    int vocab_type = 0;
+    bool add_prefix_space = false;
 
     auto tokenizer = Singleton<Tokenizer>::GetInstance();
-    status = tokenizer->GetVocabInfo(vocab, vocab_size, stop_token_ids);
+    status = tokenizer->GetVocabInfo(vocab, vocab_size, stop_token_ids, vocab_type, add_prefix_space);
     if (status.OK()) {
       try {
         structured_generator_factory = std::make_shared<StructuredGeneratorFactory>();
         structured_generator_factory->RegisterCreator(
             StructuredConstraintType::JSON,
-            std::make_unique<GrammarGeneratorCreator>(vocab, vocab_size, stop_token_ids));
+            std::make_unique<GrammarGeneratorCreator>(vocab, vocab_size, stop_token_ids, vocab_type, add_prefix_space));
         KLLM_LOG_INFO << "Structured generator factory initialized with final "
                          "vocab_size: "
                       << vocab_size;

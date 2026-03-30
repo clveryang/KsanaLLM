@@ -16,20 +16,17 @@ namespace ksana_llm {
 
 class GrammarBackendNvidia : public GrammarBackend {
  public:
-  GrammarBackendNvidia(const std::vector<std::string>& vocab, int vocab_size,
-                       const std::vector<int>& stop_token_ids);
+  // vocab_type: 0 = RAW, 1 = BYTE_FALLBACK, 2 = BYTE_LEVEL (detected by Python side)
+  GrammarBackendNvidia(const std::vector<std::string>& vocab, int vocab_size, const std::vector<int>& stop_token_ids,
+                       int vocab_type = 0, bool add_prefix_space = false);
   ~GrammarBackendNvidia() override;
 
-  // Implement pure virtual methods from base class
   std::shared_ptr<CompiledGrammar> CompileJSONSchema(const std::string& schema) override;
   std::shared_ptr<GrammarMatcherWrapper> CreateMatcher(std::shared_ptr<CompiledGrammar> grammar) override;
   const xgrammar::TokenizerInfo& GetTokenizerInfo() const override;
   bool IsInitialized() const override { return initialized_; }
 
  private:
-  // Detect tokenizer type using XGrammar API
-  void DetectTokenizerType(int& vocab_type, bool& add_prefix_space);
-
   std::unique_ptr<xgrammar::TokenizerInfo> tokenizer_info_;
   std::unique_ptr<xgrammar::GrammarCompiler> compiler_;
   bool initialized_ = false;

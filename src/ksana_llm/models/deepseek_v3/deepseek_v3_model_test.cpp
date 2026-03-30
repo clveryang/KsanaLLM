@@ -376,13 +376,16 @@ class DeepSeekV3Test : public testing::Test {
     std::vector<std::string> vocab;
     int vocab_size = static_cast<int>(model_config.vocab_size);
     std::vector<int> stop_token_ids;
+    int vocab_type = 0;
+    bool add_prefix_space = false;
 
     Singleton<Tokenizer>::GetInstance()->InitTokenizer(model_path);
     auto tokenizer = Singleton<Tokenizer>::GetInstance();
-    tokenizer->GetVocabInfo(vocab, vocab_size, stop_token_ids);
+    tokenizer->GetVocabInfo(vocab, vocab_size, stop_token_ids, vocab_type, add_prefix_space);
     structured_generator_factory_ = std::make_shared<StructuredGeneratorFactory>();
     structured_generator_factory_->RegisterCreator(
-        StructuredConstraintType::JSON, std::make_unique<GrammarGeneratorCreator>(vocab, vocab_size, stop_token_ids));
+        StructuredConstraintType::JSON,
+        std::make_unique<GrammarGeneratorCreator>(vocab, vocab_size, stop_token_ids, vocab_type, add_prefix_space));
 
     std::string json_schema = R"({
       "type": "object"

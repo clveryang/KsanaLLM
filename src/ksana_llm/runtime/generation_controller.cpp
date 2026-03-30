@@ -56,16 +56,15 @@ void GenerationController::UpdateGrammarState(std::vector<std::shared_ptr<InferR
       req->generated_tokens.push_back(token_id);
     } else {
       if (req->structured_generator->IsTerminated()) {
-        // Note: The request termination should be handled by the caller
+        // Grammar already completed (e.g. JSON structure is closed). Don't advance the state
+        // machine further — AcceptToken would return false and flood WARNING logs.
         KLLM_LOG_DEBUG << "Structured generation completed for request " << req->req_id;
-      }
-
-      int token_id = req->sampling_result_tokens.front();
-      bool accepted = req->structured_generator->AcceptToken(token_id);
-
-      if (!accepted) {
-        // In production, this should rarely happen if the mask was applied correctly
-        KLLM_LOG_WARNING << "Structured constraint rejected token " << token_id << " for request " << req->req_id;
+      } else {
+        bool accepted = req->structured_generator->AcceptToken(token_id);
+        if (!accepted) {
+          KLLM_LOG_WARNING << "Structured constraint rejected token " << token_id << " for request " << req->req_id
+                           << ", grammar state may be inconsistent";
+        }
       }
       req->generated_tokens.push_back(token_id);
     }
