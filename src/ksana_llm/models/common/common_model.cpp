@@ -19,7 +19,6 @@
 #include "ksana_llm/utils/request.h"
 #include "ksana_llm/utils/singleton.h"
 #include "ksana_llm/utils/string_utils.h"
-
 namespace ksana_llm {
 
 void RecordRequestSchedEventWithFContext(ForwardingContext& forwarding_context, const char* type,
@@ -306,7 +305,7 @@ bool CommonModel::UpdateResponse(std::vector<ForwardRequest*>& forward_reqs, Ten
     // Copy data from the output tensor to the output_data buffer based on slice positions.
     for (auto [l, r] : slice_pos) {
       MemcpyAsync(ret_tensor.data.data() + output_len * chunk_size,
-                  output.GetPtr<void>() + (req_offset - output_token_num + l) * chunk_size, (r - l + 1) * chunk_size,
+                  static_cast<char*>(output.GetPtr<void>()) + (req_offset - output_token_num + l) * chunk_size, (r - l + 1) * chunk_size,
                   MEMCPY_DEVICE_TO_HOST, context_->GetComputeStreams()[rank_]);
       output_len += r - l + 1;
     }
@@ -554,6 +553,7 @@ Status CommonModel::LmHead(ForwardingContext& forwarding_context, std::shared_pt
 
   CREATE_BUFFER_SCOPE(hidden_buffer_tensors_0, forwarding_context.GetForwardingBuffers()->hidden_buffer_0);
   CREATE_BUFFER_SCOPE(hidden_buffer_tensors_1, forwarding_context.GetForwardingBuffers()->hidden_buffer_1);
+
 // assemble last token
 // The input is stored in `residual_buffer`.
 #ifdef ENABLE_CUDA

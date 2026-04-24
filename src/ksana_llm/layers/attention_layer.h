@@ -3,7 +3,11 @@
 ==============================================================================*/
 #pragma once
 
-#ifdef ENABLE_CUDA
+#ifdef ENABLE_ILUVATAR
+#  include <optional>
+
+#  include "csrc/kernels/iluvatar/rotary_embedding/rotary_embedding.h"
+#elif defined(ENABLE_CUDA)
 #  include <optional>
 
 #  include "csrc/kernels/nvidia/alibi/alibi.h"
@@ -43,7 +47,7 @@ class AttentionLayer : public BaseLayer {
 
   virtual Status Forward(const std::vector<Tensor>& input_tensors, std::vector<Tensor>& output_tensors) = 0;
 
-#ifdef ENABLE_CUDA
+#if defined(ENABLE_CUDA) || defined(ENABLE_ILUVATAR)
   // for deepseek yarn - static helper functions
   static float deepseek_yarn_get_mscale(const float scale, const float mscale);
 
@@ -86,7 +90,10 @@ class AttentionLayer : public BaseLayer {
   // TODO(winminkong): the matmul op will be removed from mla attn in the subsequent steps.
   QuantMode mm_quant_mode_;
 
-#ifdef ENABLE_CUDA
+#ifdef ENABLE_ILUVATAR
+  std::optional<llm_kernels::iluvatar::RotaryEmbeddingCuda> rotary_embedding_cuda_;
+  std::optional<void*> alibi_slopes_;
+#elif defined(ENABLE_CUDA)
   std::optional<llm_kernels::nvidia::RotaryEmbeddingCuda> rotary_embedding_cuda_;
   std::optional<void*> alibi_slopes_;
 #endif
@@ -130,8 +137,9 @@ class AttentionLayer : public BaseLayer {
       KLLM_THROW(fmt::format("{}: Unsupported Dtype type: {}.", __PRETTY_FUNCTION__, dtype)); \
   }
 
-#ifdef ENABLE_CUDA
-// Utility function for initializing YARN rotary embedding (used by sparse MLA indexer layers)
+#if defined(ENABLE_CUDA) && !defined(ENABLE_ILUVATAR)
+// Utility function for initializing YARN rotary embedding (used by sparse MLA indexer layers).
+// iluvatar 后端排除了 sparse MLA layer，无需该模板，避免引入 nvidia::RotaryEmbeddingCuda 依赖.
 template <typename T>
 Status InitYarnRotaryEmbedding(std::optional<llm_kernels::nvidia::RotaryEmbeddingCuda>& rotary_embedding_cuda,
                                const RoPEScalingFactor& rope_scaling_factor_config, void* cos_sin_cache_ptr,

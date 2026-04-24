@@ -6,12 +6,14 @@
 #include "ksana_llm/layers/batched_matmul_layer.h"
 #include "ksana_llm/layers/blockwise_matmul_layer.h"
 #include "ksana_llm/layers/cutlass_matmul_layer.h"
+#ifndef ILUVATAR_MINIMAL
 #include "ksana_llm/layers/cutlass_moe_layer.h"
 #include "ksana_llm/layers/fp8_matmul_layer.h"
 #include "ksana_llm/layers/fp8_moe_layer.h"
 #include "ksana_llm/layers/machete_matmul_layer.h"
 #include "ksana_llm/layers/marlin_matmul_layer.h"
 #include "ksana_llm/layers/marlin_moe_layer.h"
+#endif
 #include "ksana_llm/layers/matmul_layer.h"
 #include "ksana_llm/layers/moe_layer.h"
 
@@ -32,7 +34,11 @@ MoeLayerFactory::MoeLayerFactory(const ModelConfig& model_config, const RuntimeC
 
   // for hunyuan-large int4
   builder_map_[{TYPE_I4_GROUP, TYPE_FP16, TYPE_FP16, MOE_QUANT_GPTQ, MARLIN_MOE_BACKEND}] =
+      #ifndef ILUVATAR_MINIMAL
       &MoeLayerFactory::BuildLayer<MarlinMoeLayer>;
+#else
+      &MoeLayerFactory::BuildLayer<MoeLayer>;  // fallback
+#endif
 
 #  ifdef ENABLE_FP8
   // NOTE: Fp8MoeLayer only suport fp8e4m3 rightnow

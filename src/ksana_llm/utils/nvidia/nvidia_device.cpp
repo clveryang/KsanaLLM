@@ -77,7 +77,7 @@ bool EventQueryT<DEVICE_TYPE_NVIDIA>(EventT<DEVICE_TYPE_NVIDIA> event) {
 
 template <>
 void StreamWaitEventT<DEVICE_TYPE_NVIDIA>(StreamT<DEVICE_TYPE_NVIDIA> stream, EventT<DEVICE_TYPE_NVIDIA> event) {
-  CUDA_CHECK(cudaStreamWaitEvent(stream.Get(), event.Get()));
+  CUDA_CHECK(cudaStreamWaitEvent(stream.Get(), event.Get(), 0));
 }
 
 template <>

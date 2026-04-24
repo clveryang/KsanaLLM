@@ -4,6 +4,21 @@
 
 #pragma once
 
+// Iluvatar compat: CUDART_INF_FP16 / CUDART_INF_BF16 not in corex headers
+#ifndef CUDART_INF_FP16
+#  include <cuda_fp16.h>
+#  define CUDART_INF_FP16 __half_raw{0x7C00U}
+#endif
+#ifndef CUDART_INF_BF16
+#  include <cuda_bf16.h>
+#  define CUDART_INF_BF16 __nv_bfloat16_raw{0x7F80U}
+#endif
+// Iluvatar compat: ensure __CUDA_ALIGN__ is defined for clang++
+#ifndef __CUDA_ALIGN__
+#  define __CUDA_ALIGN__(n) __attribute__((aligned(n)))
+#endif
+
+
 #include <cublasLt.h>
 #include <cublas_v2.h>
 #include <cuda.h>
@@ -490,6 +505,7 @@ inline __device__ T NegativeInfinity() {
   return -INFINITY;
 }
 
+#if !defined(ENABLE_ILUVATAR)
 template <>
 inline __device__ __half NegativeInfinity<__half>() {
   return -CUDART_INF_FP16;
@@ -499,6 +515,7 @@ template <>
 inline __device__ __nv_bfloat16 NegativeInfinity<__nv_bfloat16>() {
   return -CUDART_INF_BF16;
 }
+#endif
 
 }  // namespace utils
 }  // namespace llm_kernels

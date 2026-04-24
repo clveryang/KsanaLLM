@@ -46,7 +46,7 @@ void BlockAllocator::PreAllocateBlocks() {
     SetDevice(rank_);
   }
 
-#if defined(ENABLE_ACL) || defined(ENABLE_FLASH_ATTN_WITH_CACHE)
+#if defined(ENABLE_ACL) || defined(ENABLE_FLASH_ATTN_WITH_CACHE) || defined(ENABLE_ILUVATAR)
   if (location_ == MemoryLocation::LOCATION_DEVICE) {
     use_continuous_memory = true;
     size_t dev_bytes = (block_num_ + 1) * block_size_;
@@ -89,7 +89,7 @@ void BlockAllocator::Clear() {
     SetDevice(rank_);
   }
 
-#if defined(ENABLE_ACL_ATB) || defined(ENABLE_FLASH_ATTN_WITH_CACHE)
+#if defined(ENABLE_ACL_ATB) || defined(ENABLE_FLASH_ATTN_WITH_CACHE) || defined(ENABLE_ILUVATAR)
   if (location_ == MemoryLocation::LOCATION_DEVICE) {
     std::unique_lock<std::shared_mutex> lock(shared_mutex_);
 

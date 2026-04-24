@@ -12,9 +12,18 @@
 #define DEVICE_TYPE_NVIDIA 0
 #define DEVICE_TYPE_ASCEND 1
 #define DEVICE_TYPE_ZIXIAO 2
+#define DEVICE_TYPE_ILUVATAR 3
 
 // Unknown device type.
 #define DEVICE_TYPE_UNKNOWN -1
+
+// Iluvatar Corex is CUDA-API-compatible. For the entire C++ abstraction layer
+// (Stream/Event/Malloc, DataType enum, cublas headers, etc.) we unconditionally
+// act as ENABLE_CUDA when ENABLE_ILUVATAR is set, and only diverge at the
+// kernel call site (where we swap in ixformer for real compute).
+#if defined(ENABLE_ILUVATAR) && !defined(ENABLE_CUDA)
+#  define ENABLE_CUDA
+#endif
 
 // Select active device type.
 #ifdef ENABLE_CUDA

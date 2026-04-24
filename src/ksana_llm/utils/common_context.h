@@ -82,7 +82,7 @@ class ContextT {
   }
 
  public:
-  friend class ExtensionTypeTraits<T>::value_type;
+  friend typename ExtensionTypeTraits<T>::value_type;
   typename ExtensionTypeTraits<T>::value_type* ext = nullptr;
 
  private:

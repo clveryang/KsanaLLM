@@ -20,6 +20,18 @@ if(WITH_CUDA)
     ${PROJECT_SOURCE_DIR}/src/ksana_llm/utils/nvidia/*.cu)
   list(APPEND utils_nvidia_LIBS ${NCCL_LIBRARIES} -lcudart -lcublas -lcublasLt -lcuda -lnvrtc -lcudadevrt
     llm_kernels_nvidia_utils)
+elseif(WITH_ILUVATAR)
+  # Iluvatar: use nvidia .cpp (device abstraction) BUT replace context/device
+  # with iluvatar-specific versions that handle driver quirks.
+  file(GLOB_RECURSE utils_nvidia_SRCS ${PROJECT_SOURCE_DIR}/src/ksana_llm/utils/nvidia/*.cpp)
+  # Remove nvidia_context.cpp and nvidia_device.cpp (replaced by iluvatar versions)
+  list(FILTER utils_nvidia_SRCS EXCLUDE REGEX "nvidia_context\\.cpp$")
+  list(FILTER utils_nvidia_SRCS EXCLUDE REGEX "nvidia_device\\.cpp$")
+  list(FILTER utils_nvidia_SRCS EXCLUDE REGEX "cuda_utils\\.cpp$")  # Hopper multicast code
+  # Add iluvatar-specific files
+  file(GLOB_RECURSE utils_iluvatar_SRCS ${PROJECT_SOURCE_DIR}/src/ksana_llm/utils/iluvatar/*.cpp)
+  list(APPEND utils_nvidia_SRCS ${utils_iluvatar_SRCS})
+  list(APPEND utils_nvidia_LIBS ${NCCL_LIBRARIES} -lcudart -lcublas -lcublasLt)
 endif()
 
 set(utils_ascend_SRCS "")

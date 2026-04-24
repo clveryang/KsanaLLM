@@ -154,7 +154,7 @@ Status LlamaModelWeightLoader::ProcessModelWeights(const std::unordered_map<std:
         slice_bytes = host_weight_tensor.GetTotalBytes() - slice_offset;
       }
 
-      MemcpyAsync(dev_tensor.GetPtr<void>(), permute_dev_tensor.GetPtr<void>() + slice_offset, slice_bytes,
+      MemcpyAsync(dev_tensor.GetPtr<void>(), static_cast<char*>(permute_dev_tensor.GetPtr<void>()) + slice_offset, slice_bytes,
                   MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
       StreamSynchronize(context_->GetMemoryManageStreams()[dev_rank]);
 
@@ -184,7 +184,7 @@ Status LlamaModelWeightLoader::ProcessModelWeights(const std::unordered_map<std:
       }
 
       Tensor full_dev_tensor = Tensor(MemoryLocation::LOCATION_DEVICE, host_weight_tensor.dtype, slice_shape, dev_rank);
-      MemcpyAsync(full_dev_tensor.GetPtr<void>(), host_weight_tensor.GetPtr<void>() + slice_offset, slice_bytes,
+      MemcpyAsync(full_dev_tensor.GetPtr<void>(), static_cast<char*>(host_weight_tensor.GetPtr<void>()) + slice_offset, slice_bytes,
                   MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
       StreamSynchronize(context_->GetMemoryManageStreams()[dev_rank]);
 
@@ -226,7 +226,7 @@ Status LlamaModelWeightLoader::ProcessModelWeights(const std::unordered_map<std:
         slice_bytes = host_weight_tensor.GetTotalBytes() - slice_offset;
       }
 
-      MemcpyAsync(full_dev_tensor.GetPtr<void>(), permute_dev_tensor.GetPtr<void>() + slice_offset, slice_bytes,
+      MemcpyAsync(full_dev_tensor.GetPtr<void>(), static_cast<char*>(permute_dev_tensor.GetPtr<void>()) + slice_offset, slice_bytes,
                   MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
       StreamSynchronize(context_->GetMemoryManageStreams()[dev_rank]);
 
@@ -257,7 +257,7 @@ Status LlamaModelWeightLoader::ProcessModelWeights(const std::unordered_map<std:
         slice_bytes = host_weight_tensor.GetTotalBytes() - slice_offset;
       }
 
-      MemcpyAsync(dev_tensor.GetPtr<void>(), host_weight_tensor.GetPtr<void>() + slice_offset, slice_bytes,
+      MemcpyAsync(dev_tensor.GetPtr<void>(), static_cast<char*>(host_weight_tensor.GetPtr<void>()) + slice_offset, slice_bytes,
                   MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
 
       // Cast to expected type.

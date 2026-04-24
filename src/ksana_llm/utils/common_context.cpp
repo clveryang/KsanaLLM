@@ -44,13 +44,10 @@ ContextT<T>::ContextT(const size_t tensor_parallel_size, const size_t attn_data_
   is_chief_ = pipeline_config_.world_size == 1 || pipeline_config_.node_rank == 0;
   is_standalone_ = pipeline_config_.world_size == 1;
 
-  // Initialize expert parallel configure.  Make sure ep share is_chief_ with pp
-  // is ok later.
   Singleton<Environment>::GetInstance()->GetExpertParallelConfig(expert_parallel_config_);
   is_expert_chief_ = expert_parallel_config_.expert_world_size == 1 || expert_parallel_config_.expert_node_rank == 0;
   is_expert_standalone_ = expert_parallel_config_.expert_world_size == 1;
 
-  // Initialize the device extension.
   InitializeExtension();
 }
 

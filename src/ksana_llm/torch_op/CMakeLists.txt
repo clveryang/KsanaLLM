@@ -16,7 +16,7 @@ set_target_properties(torch_serving PROPERTIES
     INSTALL_RPATH_USE_LINK_PATH OFF
 )
 
-if(WITH_CUDA OR WITH_TOPS)
+if(WITH_CUDA OR WITH_TOPS OR WITH_ILUVATAR)
   target_link_libraries(torch_serving PRIVATE ${TORCH_LIBRARIES} ksana_llm_libs)
 endif()
 

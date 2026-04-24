@@ -43,7 +43,7 @@ Status InputRefitLayer::ForwardT(const std::vector<Tensor>& input_tensors, std::
     cast_tensor_vec_.push_back(cast_tensor);
     // Copy the cast tensor data to the output tensor.
     if (pos * hidden_units + len <= output_tensors[0].GetElementNumber()) {
-      MemcpyAsync(output_ptr + pos * hidden_units * sizeof(T), cast_tensor.data_ptr(), len * sizeof(T),
+      MemcpyAsync(static_cast<char*>(output_ptr) + pos * hidden_units * sizeof(T), cast_tensor.data_ptr(), len * sizeof(T),
                   MEMCPY_HOST_TO_DEVICE, context_->GetComputeStreams()[rank_]);
     }
   }

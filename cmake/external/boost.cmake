@@ -89,7 +89,17 @@ endif()
 
 # 验证 Boost::dll 目标是否可用
 if(NOT TARGET Boost::dll)
-    message(FATAL_ERROR "Boost::dll 目标不可用，请检查 Boost 配置")
+    # Ubuntu BoostConfig does not ship Boost::dll target (it is header-only).
+    add_library(Boost::dll INTERFACE IMPORTED)
+    if(DEFINED Boost_INCLUDE_DIRS AND Boost_INCLUDE_DIRS)
+        set_target_properties(Boost::dll PROPERTIES
+            INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+    endif()
+    if(TARGET Boost::filesystem)
+        set_target_properties(Boost::dll PROPERTIES
+            INTERFACE_LINK_LIBRARIES "Boost::filesystem;Boost::system")
+    endif()
+    message(STATUS "Boost::dll as INTERFACE target created")
 endif()
 
 # 输出调试信息

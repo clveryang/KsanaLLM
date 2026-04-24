@@ -6,7 +6,14 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple, Union
 
+import os, sys, ctypes
+import torch  # must be imported first to expose libtorch symbols
+# Iluvatar: use RTLD_LAZY for the import so unresolved llm_kernels symbols
+# (which are never called for Llama models) don't block loading.
+_orig = sys.getdlopenflags()
+sys.setdlopenflags(0x1 | 0x100)  # RTLD_LAZY | RTLD_GLOBAL
 import libtorch_serving
+sys.setdlopenflags(_orig)
 from transformers import GenerationConfig, PreTrainedTokenizerFast
 from utilize.logger import get_logger
 from .arg_utils import EngineArgs
@@ -140,6 +147,11 @@ class KsanaLLMEngine:
         Args:
             reasoning_config: Optional configuration for reasoning models.
         """
+        # Iluvatar Corex: CUDA context must be fully initialized via torch
+        # before any direct cudart calls (cudaStreamCreate hangs otherwise).
+        torch.cuda.init()
+        _ = torch.zeros(1, device="cuda:0")  # force CUDA context creation
+        torch.cuda.synchronize()
         self._serving.init_serving(self._config_file, reasoning_config)
 
     @classmethod

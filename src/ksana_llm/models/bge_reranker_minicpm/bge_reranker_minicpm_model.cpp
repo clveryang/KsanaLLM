@@ -178,7 +178,7 @@ bool BgeRerankerMinicpmModel::BgeRerankerUpdateResponse(std::vector<ForwardReque
       ret_tensor.shape = {static_cast<size_t>(output_token_num), output.shape[1]};
       ret_tensor.dtype = GetTypeString(output.dtype);
       ret_tensor.data.resize(output_token_num * chunk_size);
-      MemcpyAsync(ret_tensor.data.data(), output.GetPtr<void>() + req_offset * chunk_size,
+      MemcpyAsync(ret_tensor.data.data(), static_cast<char*>(output.GetPtr<void>()) + req_offset * chunk_size,
                   output_token_num * chunk_size, MEMCPY_DEVICE_TO_HOST, context_->GetComputeStreams()[rank_]);
       StreamSynchronize(context_->GetComputeStreams()[rank_]);
       req_offset += output_token_num;

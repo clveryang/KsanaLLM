@@ -41,13 +41,13 @@ Status CommonModelWeightLoader::LoadMhaWeights(const std::string& host_weight_na
     size_t offset = num_heads * size_per_head * dev_tensor.shape[1];
     offset = DivRoundUp(offset, context_->GetTensorParallelSize());
     offset *= GetTypeSize(dev_tensor.dtype);
-    MemcpyAsync(query_key_value_tensor.GetPtr<void>() + offset, dev_tensor.GetPtr<void>(), dev_tensor.GetTotalBytes(),
+    MemcpyAsync(static_cast<char*>(query_key_value_tensor.GetPtr<void>()) + offset, dev_tensor.GetPtr<void>(), dev_tensor.GetTotalBytes(),
                 MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
   } else if (host_weight_name.find(".v_proj.") != std::string::npos) {
     size_t offset = (num_heads * size_per_head + num_kv_heads * size_per_head) * dev_tensor.shape[1];
     offset = DivRoundUp(offset, context_->GetTensorParallelSize());
     offset *= GetTypeSize(dev_tensor.dtype);
-    MemcpyAsync(query_key_value_tensor.GetPtr<void>() + offset, dev_tensor.GetPtr<void>(), dev_tensor.GetTotalBytes(),
+    MemcpyAsync(static_cast<char*>(query_key_value_tensor.GetPtr<void>()) + offset, dev_tensor.GetPtr<void>(), dev_tensor.GetTotalBytes(),
                 MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
   }
 
@@ -108,7 +108,7 @@ Status CommonModelWeightLoader::SplitOptTrans(const Tensor& weight_tensor, Tenso
 
   MemcpyKind memcpy_kind =
       weight_tensor.location == MemoryLocation::LOCATION_HOST ? MEMCPY_HOST_TO_DEVICE : MEMCPY_DEVICE_TO_DEVICE;
-  MemcpyAsync(dev_tensor.GetPtr<void>(), weight_tensor.GetPtr<void>() + slice_offset, slice_bytes, memcpy_kind,
+  MemcpyAsync(dev_tensor.GetPtr<void>(), static_cast<char*>(weight_tensor.GetPtr<void>()) + slice_offset, slice_bytes, memcpy_kind,
               context_->GetMemoryManageStreams()[dev_rank]);
   if (transpose) {
     PermuteWeight(dev_tensor, {1, 0}, dev_rank);
@@ -157,7 +157,7 @@ Tensor CommonModelWeightLoader::TensorParallelSplit1D(const Tensor& input_tensor
   size_t slice_offset = dev_tensor.GetTotalBytes() * (dev_rank % para_size);
   size_t slice_bytes = dev_tensor.GetTotalBytes();
   MemcpyKind memcpy_kind = GetMemcpyKind(input_tensor, dev_tensor);
-  MemcpyAsync(dev_tensor.GetPtr<void>(), input_tensor.GetPtr<void>() + slice_offset, slice_bytes, memcpy_kind,
+  MemcpyAsync(dev_tensor.GetPtr<void>(), static_cast<char*>(input_tensor.GetPtr<void>()) + slice_offset, slice_bytes, memcpy_kind,
               context_->GetMemoryManageStreams()[dev_rank]);
   return dev_tensor;
 }
@@ -213,7 +213,7 @@ Status CommonModelWeightLoader::Concat(const std::vector<Tensor>& inputs_tensor,
   size_t offset = 0;
   for (size_t i = 0; i < inputs_tensor.size(); i++) {
     MemcpyKind memcpy_kind = GetMemcpyKind(inputs_tensor[i], concat);
-    MemcpyAsync(concat.GetPtr<void>() + offset, inputs_tensor[i].GetPtr<void>(), inputs_tensor[i].GetTotalBytes(),
+    MemcpyAsync(static_cast<char*>(concat.GetPtr<void>()) + offset, inputs_tensor[i].GetPtr<void>(), inputs_tensor[i].GetTotalBytes(),
                 memcpy_kind, context_->GetMemoryManageStreams()[dev_rank]);
     offset += inputs_tensor[i].GetTotalBytes();
   }

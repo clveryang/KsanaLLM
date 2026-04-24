@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <vector>
+#include "ksana_llm/utils/logger.h"
 namespace ksana_llm {
 
 Status Llama::GetModelRunConfig(ModelRunConfig& model_run_config, const ModelConfig& model_config) {
@@ -27,11 +28,13 @@ Status Llama::CreateLayers(LayerCreationContext& creation_context, ModelCreation
 
 Status Llama::Forward(std::vector<Tensor>& residual_buffer, ForwardingContext& forwarding_context) {
   const bool is_multi_token_forward = forwarding_context.GetModelInput()->multi_token_request_num > 0;
+
   for (int layer_idx = forwarding_context.GetPipelineConfig().lower_layer_idx;
        layer_idx <= forwarding_context.GetPipelineConfig().upper_layer_idx; ++layer_idx) {
     STATUS_CHECK_RETURN(
         decoder_layers_[layer_idx]->Forward(residual_buffer, is_multi_token_forward, forwarding_context));
   }
+
   return Status();
 }
 

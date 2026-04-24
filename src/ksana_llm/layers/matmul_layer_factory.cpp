@@ -4,16 +4,18 @@
 #include "ksana_llm/layers/matmul_layer_factory.h"
 
 #include "ksana_llm/layers/batched_matmul_layer.h"
-#include "ksana_llm/layers/blockwise_matmul_layer.h"
-#include "ksana_llm/layers/cutlass_matmul_layer.h"
-#include "ksana_llm/layers/finegrained_mixed_dtype_gemm_layer.h"
-#include "ksana_llm/layers/fp8_matmul_layer.h"
-#include "ksana_llm/layers/fp8_moe_layer.h"
-#include "ksana_llm/layers/machete_matmul_layer.h"
-#include "ksana_llm/layers/marlin_matmul_layer.h"
-#include "ksana_llm/layers/marlin_moe_layer.h"
 #include "ksana_llm/layers/matmul_layer.h"
-#include "ksana_llm/layers/moe_layer.h"
+#ifndef ILUVATAR_MINIMAL
+#  include "ksana_llm/layers/blockwise_matmul_layer.h"
+#  include "ksana_llm/layers/cutlass_matmul_layer.h"
+#  include "ksana_llm/layers/finegrained_mixed_dtype_gemm_layer.h"
+#  include "ksana_llm/layers/fp8_matmul_layer.h"
+#  include "ksana_llm/layers/fp8_moe_layer.h"
+#  include "ksana_llm/layers/machete_matmul_layer.h"
+#  include "ksana_llm/layers/marlin_matmul_layer.h"
+#  include "ksana_llm/layers/marlin_moe_layer.h"
+#  include "ksana_llm/layers/moe_layer.h"
+#endif
 
 namespace ksana_llm {
 
@@ -38,7 +40,7 @@ MatMulLayerFactory::MatMulLayerFactory(const ModelConfig& model_config, const Ru
   builder_map_[{TYPE_VOID, TYPE_BF16, TYPE_BF16, QUANT_NONE, DEFAULT_LINEAR_BACKEND}] =
       &MatMulLayerFactory::BuildLayer<BatchedMatMulLayer>;
 
-#ifdef ENABLE_CUDA
+#if defined(ENABLE_CUDA) && !defined(ILUVATAR_MINIMAL)
   builder_map_[{TYPE_I4_GROUP, TYPE_FP16, TYPE_FP16, QUANT_GPTQ, CUTLASS_LINEAR_BACKEND}] =
       &MatMulLayerFactory::BuildLayer<CutlassMatMulLayer>;
   builder_map_[{TYPE_I4_GROUP, TYPE_FP16, TYPE_FP16, QUANT_AWQ, CUTLASS_LINEAR_BACKEND}] =
@@ -91,6 +93,7 @@ std::shared_ptr<BaseLayer> MatMulLayerFactory::AutoCreateLayer(std::shared_ptr<B
                                                                const std::vector<std::any>& init_params) {
   // w4a8_awq
   const WeightStatus& weight_status = context_->GetWeightStatus(weight_name);
+  #ifndef ILUVATAR_MINIMAL
   if (weight_status.quant_mode == QUANT_W4A8_AWQ) {
     using Parameters = FinegrainedMixedDtypeGemmLayerParameters;
     Parameters param{.m = runtime_config_.max_step_token_num,
@@ -102,6 +105,7 @@ std::shared_ptr<BaseLayer> MatMulLayerFactory::AutoCreateLayer(std::shared_ptr<B
                      .output_type = output_type};
     return CreateLayer(TYPE_I4_GROUP, input_type, output_type, {param}, QUANT_W4A8_AWQ, CUTLASS_LINEAR_BACKEND);
   }
+#endif
   // gptq layer
   if (model_config_.is_quant &&
       (model_config_.quant_config.method == QUANT_GPTQ || model_config_.quant_config.method == QUANT_AWQ)) {

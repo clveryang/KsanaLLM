@@ -36,6 +36,18 @@ if(WITH_CUDA)
     llm_kernels_nvidia_kernel_moe_per_tensor_quant_by_scale
     llm_kernels_nvidia_kernel_logits_topk llm_kernels_nvidia_kernel_weight_scale
     llm_kernels_nvidia_kernel_flashinfer_attention)
+elseif(WITH_ILUVATAR)
+  # Iluvatar: do NOT compile nvidia/*.cpp (they need 3rdparty/LLM_kernels headers).
+  # Only compile iluvatar/*.cpp. Undefined symbols from nvidia layers will be
+  # resolved lazily; Llama code paths only hit cublas/ixinfer which we do have.
+  #
+  # 逐个接入的真实算子，命名为 llm_kernels_iluvatar_kernel_*（与 nvidia 区分），
+  # 但其中的 C++ 命名空间仍是 llm_kernels::nvidia，调用方零修改。
+  list(APPEND nvidia_kernels_LIBS -lcudart -lcublas -lcublasLt ${IXINFER_LIBS}
+    llm_kernels_iluvatar_kernel_embedding
+    llm_kernels_iluvatar_kernel_rotary_embedding
+    llm_kernels_iluvatar_kernel_paged_attention
+    llm_kernels_iluvatar_utils)
 endif()
 
 
@@ -66,8 +78,26 @@ if(WITH_TOPS)
   list(FILTER zixiao_kernels_SRCS EXCLUDE REGEX ".*test.cpp")
 endif()
 
-add_library(kernels STATIC ${nvidia_kernels_SRCS} ${ascend_kernels_SRCS} ${zixiao_kernels_SRCS})
-target_link_libraries(kernels PUBLIC utils cache_manager ${Python3_LIBRARIES} ${nvidia_kernels_LIBS} ${ascend_kernels_LIBS})
+# ---- Iluvatar backend ----------------------------------------------------
+set(iluvatar_kernels_LIBS "")
+set(iluvatar_kernels_SRCS "")
+if(WITH_ILUVATAR)
+  file(GLOB_RECURSE iluvatar_kernels_SRCS
+    ${PROJECT_SOURCE_DIR}/src/ksana_llm/kernels/iluvatar/*.cpp)
+  # .cu files compiled as CXX with Iluvatar ivcore flags
+  file(GLOB iluvatar_cu_SRCS ${PROJECT_SOURCE_DIR}/src/ksana_llm/kernels/iluvatar/*.cu)
+  foreach(cu_file ${iluvatar_cu_SRCS})
+    set_source_files_properties(${cu_file} PROPERTIES
+      LANGUAGE CXX
+      COMPILE_FLAGS "-x ivcore --cuda-gpu-arch=${IX_GPU_ARCH}")
+  endforeach()
+  list(APPEND iluvatar_kernels_SRCS ${iluvatar_cu_SRCS})
+  list(FILTER iluvatar_kernels_SRCS EXCLUDE REGEX ".*test.cpp")
+  list(APPEND iluvatar_kernels_LIBS ${IXINFER_LIBS} cudart cublas)
+endif()
+
+add_library(kernels STATIC ${nvidia_kernels_SRCS} ${ascend_kernels_SRCS} ${zixiao_kernels_SRCS} ${iluvatar_kernels_SRCS})
+target_link_libraries(kernels PUBLIC utils cache_manager ${Python3_LIBRARIES} ${nvidia_kernels_LIBS} ${ascend_kernels_LIBS} ${iluvatar_kernels_LIBS})
 
 if(WITH_CUDA)
   set(KERNELS_TEST_PREPARE_CODE ${PROJECT_SOURCE_DIR}/tests/triton_wrapper_test.py)

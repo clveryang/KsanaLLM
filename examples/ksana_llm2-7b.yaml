@@ -1,7 +1,7 @@
 setting:
   global:
    # TP并行
-    tensor_para_size: 2
+    tensor_para_size: 1
     # PP并行
     pipeline_para_size: 1
     # 是否启用lora适配，false表示不启用，true表示启用
@@ -20,9 +20,9 @@ setting:
     # 请求队列的最大等待长度，超过对应长度时会丢弃新请求，主要用于流控。
     max_waiting_queue_len: 1200
     # 一个调度step处理的最大token个数，一次context decode视为多个token。
-    max_step_tokens: 4096
+    max_step_tokens: 2048
     # 每一步推理时的最大batch_size
-    max_batch_size: 128
+    max_batch_size: 32
     # 最大输入输出长度之和, 相当于prompt_len+max_new_tokens
     max_token_len: 2048
     # 单个请求可用blck小于该值触发换出
@@ -32,7 +32,7 @@ setting:
     # 单个请求可用block大于该值拉起新任务
     launch_block_threshold: 2.0
     # 是否开启自动前缀匹配
-    enable_auto_prefix_cache: true
+    enable_auto_prefix_cache: false
     # split_fuse_token_num用于控制在单轮推理过程中，模型处理的最大token数量。
     # 设置为256意味着在执行推理时，每个处理步骤（或“分割”）将处理最多256个token。
     # 如果设置为0，则表示不对处理的token数量进行限制，模型将尝试一次性处理整个输入。
@@ -47,14 +47,14 @@ setting:
     # 此值为最小的命中长度，推荐设置为64，值为0或超过模型最长长度表示不启用。
     min_flexible_cache_num: 0
     # 是否开启投机解码。开启后每个Step将生成一定数量的draft_tokens，成功预测的情况下可提高处理速度
-    enable_speculative_decoding: true
+    enable_speculative_decoding: false
     # MTP层数。如果模型中只有1层MTP但mtp_step_num大于1，将复用第一层的参数
-    mtp_step_num: 1
+    mtp_step_num: 0
   block_manager:
     # 单个block可处理的最大token个数
     block_token_num: 16
     # 保留的显存占比，单位为百分比。
-    reserved_device_memory_ratio: 0.01
+    reserved_device_memory_ratio: 0.05
     # Lora权重的显存占比
     lora_deivce_memory_ratio: 0.0
     # Lora权重在host上的预分配大小，相比device上的倍数
@@ -62,14 +62,18 @@ setting:
     # block部分的显存占比，<0表示使用所有剩余显存
     block_device_memory_ratio: -1.0
     # block部分在host上的预分配大小，相比device上的倍数
-    block_host_memory_factor: 1.0
+    block_host_memory_factor: 0.0
 
   tokenization:
     add_special_tokens: true
     skip_special_tokens: true
+
+  attn_backend:
+    enable_blocked_multi_token_forwarding_kv: false
+    use_flashinfer_for_decode: false
 model_spec:
   base_model:
-    model_dir: ./Llama-2-7b-hf
+    model_dir: /home/zhichao.yang/KsanaLLM/src/ksana_llm/python/TinyLlama-1.1B-Chat
 # 仅在跑模型性能压测的时候有效
 model_performance_runner_config:
   # 输入的配置

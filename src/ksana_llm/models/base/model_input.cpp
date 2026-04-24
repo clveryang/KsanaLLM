@@ -1091,8 +1091,8 @@ void ModelInput::PrepareKVCacheBlocks(input_info& info) {
       void** v_ptr = kv_list_host.data() + layer_i * total_block_num * 2 + total_block_num;
       for (size_t req_i = 0; req_i < reqs.size(); ++req_i) {
         for (const auto& cache_ptr : reqs[req_i]->kv_cache_ptrs[attn_dp_rank_id_]) {
-          *k_ptr++ = cache_ptr + cache_block_offset + kv_cache_config.k_offset;
-          *v_ptr++ = cache_ptr + cache_block_offset + kv_cache_config.v_offset;
+          *k_ptr++ = static_cast<char*>(cache_ptr) + cache_block_offset + kv_cache_config.k_offset;
+          *v_ptr++ = static_cast<char*>(cache_ptr) + cache_block_offset + kv_cache_config.v_offset;
         }
       }
     }
@@ -1287,11 +1287,11 @@ void ModelInput::PrepareKVCacheBlockTable(input_info& info) {
       // Get each layer's raw pointer of k_cache and v_cache tensor from
       // kv_cache[num_blocks, num_layers, 2, block_size, num_kv_heads, head_size]
       // block_size is [num_layers, 2, block_size, num_kv_heads, head_size]
-      void* const k_cache_base_ptr = device_allocator->GetBlocksBasePtr() + kv_cache_config.k_offset;
-      void* const v_cache_base_ptr = device_allocator->GetBlocksBasePtr() + kv_cache_config.v_offset;
+      void* const k_cache_base_ptr = static_cast<char*>(device_allocator->GetBlocksBasePtr()) + kv_cache_config.k_offset;
+      void* const v_cache_base_ptr = static_cast<char*>(device_allocator->GetBlocksBasePtr()) + kv_cache_config.v_offset;
       for (int layer_idx = 0; layer_idx < layer_num_on_node_; ++layer_idx) {
-        *current_layer_kv_cache_ptr++ = k_cache_base_ptr + layer_idx * block_size_per_layer;
-        *current_layer_kv_cache_ptr++ = v_cache_base_ptr + layer_idx * block_size_per_layer;
+        *current_layer_kv_cache_ptr++ = static_cast<char*>(k_cache_base_ptr) + layer_idx * block_size_per_layer;
+        *current_layer_kv_cache_ptr++ = static_cast<char*>(v_cache_base_ptr) + layer_idx * block_size_per_layer;
       }
     }
   }

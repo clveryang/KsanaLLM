@@ -394,8 +394,7 @@ Status MultiHeadLatentAttention::Forward(std::vector<Tensor>& hidden_buffer_tens
     }
     if (dp_token_offset + dp_total_tokens < total_tokens) {
       // `[dp_token_offset + dp_total_tokens, total_tokens)`
-      MemsetAsync(hidden_buffer_tensors_0[0].GetPtr<void>() +
-                      (dp_token_offset + dp_total_tokens) * o_proj_k_dim_ * hidden_buffer_tensors_0[0].GetDTypeSize(),
+      MemsetAsync(static_cast<char*>(hidden_buffer_tensors_0[0].GetPtr<void>()) + (dp_token_offset + dp_total_tokens) * o_proj_k_dim_ * hidden_buffer_tensors_0[0].GetDTypeSize(),
                   0,
                   (total_tokens - dp_token_offset - dp_total_tokens) * o_proj_k_dim_ *
                       hidden_buffer_tensors_0[0].GetDTypeSize(),
@@ -445,7 +444,7 @@ Status MultiHeadLatentAttention::Forward(std::vector<Tensor>& hidden_buffer_tens
       }
       if (dp_token_offset + dp_total_tokens < total_tokens) {
         // `[dp_token_offset + dp_total_tokens, total_tokens)`
-        MemsetAsync(reduce_buffer_tensors[0].GetPtr<void>() + (dp_token_offset + dp_total_tokens) * hidden_units_bytes,
+        MemsetAsync(static_cast<char*>(reduce_buffer_tensors[0].GetPtr<void>()) + (dp_token_offset + dp_total_tokens) * hidden_units_bytes,
                     0, (total_tokens - dp_token_offset - dp_total_tokens) * hidden_units_bytes,
                     forwarding_context.GetContext()->GetComputeStreams()[rank]);
       }

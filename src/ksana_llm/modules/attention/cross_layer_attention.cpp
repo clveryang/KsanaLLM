@@ -58,10 +58,10 @@ Status CrossLayerAttention::QKVClaBufferCopy(std::vector<Tensor>& hidden_buffer_
   Tensor& hidden_tensor_1 = hidden_buffer_tensors_1[0];
   if (layer_idx_ % cla_share_factor_ == 0) {
     // qkv -> cla_k, cla_v
-    Memcpy2DAsync(cla_k_tensor.GetPtr<void>(), kv_pitch_, hidden_tensor_0.GetPtr<void>() + q_pitch_, qkv_pitch_,
+    Memcpy2DAsync(cla_k_tensor.GetPtr<void>(), kv_pitch_, static_cast<char*>(hidden_tensor_0.GetPtr<void>()) + q_pitch_, qkv_pitch_,
                   kv_pitch_, total_tokens, MEMCPY_DEVICE_TO_DEVICE,
                   forwarding_context.GetContext()->GetComputeStreams()[forwarding_context.GetCurrentRank()]);
-    Memcpy2DAsync(cla_v_tensor.GetPtr<void>(), kv_pitch_, hidden_tensor_0.GetPtr<void>() + q_pitch_ + kv_pitch_,
+    Memcpy2DAsync(cla_v_tensor.GetPtr<void>(), kv_pitch_, static_cast<char*>(hidden_tensor_0.GetPtr<void>()) + q_pitch_ + kv_pitch_,
                   qkv_pitch_, kv_pitch_, total_tokens, MEMCPY_DEVICE_TO_DEVICE,
                   forwarding_context.GetContext()->GetComputeStreams()[forwarding_context.GetCurrentRank()]);
   } else {
@@ -69,10 +69,10 @@ Status CrossLayerAttention::QKVClaBufferCopy(std::vector<Tensor>& hidden_buffer_
     Memcpy2DAsync(hidden_tensor_1.GetPtr<void>(), qkv_pitch_, hidden_tensor_0.GetPtr<void>(), q_pitch_, q_pitch_,
                   total_tokens, MEMCPY_DEVICE_TO_DEVICE,
                   forwarding_context.GetContext()->GetComputeStreams()[forwarding_context.GetCurrentRank()]);
-    Memcpy2DAsync(hidden_tensor_1.GetPtr<void>() + q_pitch_, qkv_pitch_, cla_k_tensor.GetPtr<void>(), kv_pitch_,
+    Memcpy2DAsync(static_cast<char*>(hidden_tensor_1.GetPtr<void>()) + q_pitch_, qkv_pitch_, cla_k_tensor.GetPtr<void>(), kv_pitch_,
                   kv_pitch_, total_tokens, MEMCPY_DEVICE_TO_DEVICE,
                   forwarding_context.GetContext()->GetComputeStreams()[forwarding_context.GetCurrentRank()]);
-    Memcpy2DAsync(hidden_tensor_1.GetPtr<void>() + q_pitch_ + kv_pitch_, qkv_pitch_, cla_v_tensor.GetPtr<void>(),
+    Memcpy2DAsync(static_cast<char*>(hidden_tensor_1.GetPtr<void>()) + q_pitch_ + kv_pitch_, qkv_pitch_, cla_v_tensor.GetPtr<void>(),
                   kv_pitch_, kv_pitch_, total_tokens, MEMCPY_DEVICE_TO_DEVICE,
                   forwarding_context.GetContext()->GetComputeStreams()[forwarding_context.GetCurrentRank()]);
     hidden_tensor_1.shape = {total_tokens, qkv_pitch_ / inter_data_size_};

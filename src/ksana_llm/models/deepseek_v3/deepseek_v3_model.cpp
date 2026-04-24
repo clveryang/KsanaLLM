@@ -132,7 +132,7 @@ Status DeepSeekV3DecoderLayer::Forward(std::vector<Tensor>& residual_buffer, con
   if (forwarding_context.GetModelCommunicator() && enable_full_shared_expert_) {
     std::swap(reduce_buffer_tensors, hidden_buffer_tensors_0);
     Stream& stream = forwarding_context.GetContext()->GetComputeStreams()[forwarding_context.GetCurrentRank()];
-    MemcpyAsync(hidden_buffer_tensors_0[0].GetPtr<void>(), reduce_buffer_tensors[0].GetPtr<void>() + dp_bytes_offset,
+    MemcpyAsync(hidden_buffer_tensors_0[0].GetPtr<void>(), static_cast<char*>(reduce_buffer_tensors[0].GetPtr<void>()) + dp_bytes_offset,
                 dp_bytes, MEMCPY_DEVICE_TO_DEVICE, stream);
     hidden_buffer_tensors_0[0].shape = {dp_token_size, reduce_buffer_tensors[0].shape[1]};
     reduce_buffer_tensors[0].shape = hidden_buffer_tensors_0[0].shape;
@@ -150,7 +150,7 @@ Status DeepSeekV3DecoderLayer::Forward(std::vector<Tensor>& residual_buffer, con
   if (forwarding_context.GetModelCommunicator() && enable_full_shared_expert_) {
     std::swap(reduce_buffer_tensors, hidden_buffer_tensors_0);
     Stream& stream = forwarding_context.GetContext()->GetComputeStreams()[forwarding_context.GetCurrentRank()];
-    MemcpyAsync(hidden_buffer_tensors_0[0].GetPtr<void>() + dp_bytes_offset, reduce_buffer_tensors[0].GetPtr<void>(),
+    MemcpyAsync(static_cast<char*>(hidden_buffer_tensors_0[0].GetPtr<void>()) + dp_bytes_offset, reduce_buffer_tensors[0].GetPtr<void>(),
                 dp_bytes, MEMCPY_DEVICE_TO_DEVICE, stream);
     hidden_buffer_tensors_0[0].shape = {residual_buffer[0].shape[0], reduce_buffer_tensors[0].shape[1]};
     reduce_buffer_tensors[0].shape = hidden_buffer_tensors_0[0].shape;
@@ -385,7 +385,7 @@ Status DeepSeekV3Model::LayerForward(ForwardingContext& forwarding_context, cons
     }
 
     if (dp_token_offset + dp_token_size < org_token_size) {
-      MemsetAsync(residual_buffer[0].GetPtr<void>() + (dp_token_offset + dp_token_size) * token_hidden_stat_bytes, 0,
+      MemsetAsync(static_cast<char*>(residual_buffer[0].GetPtr<void>()) + (dp_token_offset + dp_token_size) * token_hidden_stat_bytes, 0,
                   (org_token_size - dp_token_offset - dp_token_size) * token_hidden_stat_bytes,
                   forwarding_context.GetContext()->GetComputeStreams()[forwarding_context.GetCurrentRank()]);
     }

@@ -88,17 +88,17 @@ void Tensor::AcquireImpl() {
         data_ptr = DeviceMemoryPool::GetMemoryPool(device_id)->Allocate(total_bytes, false);
 
         if (MemoryChecker::Enabled()) {
-          data_ptr += head_meta_bytes;
+          data_ptr = static_cast<void*>(static_cast<char*>(data_ptr) + head_meta_bytes);
           total_bytes -= (head_meta_bytes + tail_meta_bytes);
           std::string tensor_name = name.empty() ? std::to_string(reinterpret_cast<uintptr_t>(this)) : name;
           KLLM_LOG_DEBUG << "Add tensor " << tensor_name << " to check list.";
 
           SetDevice(device_id);
-          Memset(data_ptr - head_meta_bytes, 0, head_meta_bytes);
-          Memset(data_ptr + total_bytes, 0, tail_meta_bytes);
+          Memset(static_cast<char*>(data_ptr) - head_meta_bytes, 0, head_meta_bytes);
+          Memset(static_cast<char*>(data_ptr) + total_bytes, 0, tail_meta_bytes);
 
-          MemoryChecker::AddMemoryBlock(tensor_name, device_id, data_ptr - head_meta_bytes, head_meta_bytes,
-                                        data_ptr + total_bytes, tail_meta_bytes, 0);
+          MemoryChecker::AddMemoryBlock(tensor_name, device_id, static_cast<char*>(data_ptr) - head_meta_bytes, head_meta_bytes,
+                                        static_cast<char*>(data_ptr) + total_bytes, tail_meta_bytes, 0);
         }
       } else {
         SetDevice(device_id);
@@ -151,7 +151,7 @@ void Tensor::ReleaseImpl() {
           std::string tensor_name = name.empty() ? std::to_string(reinterpret_cast<uintptr_t>(this)) : name;
           KLLM_LOG_DEBUG << "Remove tensor " << tensor_name << " from check list.";
           MemoryChecker::RemoveMemoryBlock(tensor_name, device_id);
-          data_ptr -= head_meta_bytes;
+          data_ptr = static_cast<void*>(static_cast<char*>(data_ptr) - head_meta_bytes);
         }
         DeviceMemoryPool::GetMemoryPool(device_id)->Free(data_ptr);
       } else {

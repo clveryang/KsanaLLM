@@ -16,7 +16,6 @@
 #include "ksana_llm/utils/request.h"
 #include "ksana_llm/utils/singleton.h"
 #include "ksana_llm/utils/string_utils.h"
-
 namespace ksana_llm {
 
 SimpleDecoderLayer::SimpleDecoderLayer(int layer_idx, bool is_neox, bool add_qkv_bias,
@@ -96,6 +95,7 @@ Status SimpleDecoderLayer::Forward(std::vector<Tensor>& residual_buffer, const b
         reduce_buffer_tensors, residual_buffer, hidden_buffer_tensors_0, is_multi_token_forward, forwarding_context,
         /*need_add_residual*/ true, /*need_apply_norm*/ false));
   }
+
   return Status();
 }
 

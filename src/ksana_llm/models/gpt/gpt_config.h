@@ -68,7 +68,7 @@ inline void PrepareGPT2Attributes(const nlohmann::json &config_json, ModelConfig
   model_config.inter_size = config_json.value("n_inner", 4 * model_config.hidden_units);
   model_config.layernorm_eps = config_json.value("layer_norm_epsilon", 1e-5);
   model_config.start_id = config_json.value("bos_token_id", 50256);
-  model_config.end_ids = std::vector<uint32_t>{config_json.value("eos_token_id", 50256)};
+  model_config.end_ids = std::vector<uint32_t>{static_cast<uint32_t>(config_json.value("eos_token_id", 50256))};
   model_config.pad_id = config_json.value("pad_token_id", 0);
   model_config.max_position_embeddings = config_json.value("n_positions", 1024);
   model_config.activation_function = config_json.value("activation_function", "gelu_new");

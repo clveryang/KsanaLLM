@@ -213,57 +213,57 @@ Status ScheduleOutputParser::SerializeAsWorkerInferRequest(const std::vector<std
   size_t offset = 0;
 
   int req_num = infer_reqs.size();
-  std::memcpy(data + offset, &req_num, sizeof(int));
+  std::memcpy(static_cast<char*>(data) + offset, &req_num, sizeof(int));
   offset += sizeof(int);
 
   size_t inner_bytes;
 
   for (auto req : infer_reqs) {
     // req_id
-    std::memcpy(data + offset, &req->req_id, sizeof(int64_t));
+    std::memcpy(static_cast<char*>(data) + offset, &req->req_id, sizeof(int64_t));
     offset += sizeof(int64_t);
 
     // model_name
     int model_name_size = req->model_name.size();
-    std::memcpy(data + offset, &model_name_size, sizeof(int));
+    std::memcpy(static_cast<char*>(data) + offset, &model_name_size, sizeof(int));
     offset += sizeof(int);
 
-    std::memcpy(data + offset, req->model_name.data(), req->model_name.size());
+    std::memcpy(static_cast<char*>(data) + offset, req->model_name.data(), req->model_name.size());
     offset += req->model_name.size();
 
     // forwarding_tokens
-    SerializeVector(req->forwarding_tokens, data + offset, inner_bytes);
+    SerializeVector(req->forwarding_tokens, static_cast<char*>(data) + offset, inner_bytes);
     offset += inner_bytes;
 
     // infer_stage
-    std::memcpy(data + offset, &req->infer_stage, sizeof(InferStage));
+    std::memcpy(static_cast<char*>(data) + offset, &req->infer_stage, sizeof(InferStage));
     offset += sizeof(InferStage);
 
     // step
-    std::memcpy(data + offset, &req->step, sizeof(int));
+    std::memcpy(static_cast<char*>(data) + offset, &req->step, sizeof(int));
     offset += sizeof(int);
 
     // kv_cache_blocks
-    SerializeVectorOfVector(req->kv_cache_blocks, data + offset, inner_bytes);
+    SerializeVectorOfVector(req->kv_cache_blocks, static_cast<char*>(data) + offset, inner_bytes);
     offset += inner_bytes;
 
     // prefix_cache_len
-    std::memcpy(data + offset, &req->prefix_cache_len, sizeof(int));
+    std::memcpy(static_cast<char*>(data) + offset, &req->prefix_cache_len, sizeof(int));
     offset += sizeof(int);
 
     // kv_cached_token_num
-    std::memcpy(data + offset, &req->kv_cached_token_num, sizeof(int));
+    std::memcpy(static_cast<char*>(data) + offset, &req->kv_cached_token_num, sizeof(int));
     offset += sizeof(int);
 
     // mrotary_embedding_pos_offset
-    std::memcpy(data + offset, &req->mrotary_embedding_pos_offset, sizeof(int64_t));
+    std::memcpy(static_cast<char*>(data) + offset, &req->mrotary_embedding_pos_offset, sizeof(int64_t));
     offset += sizeof(int64_t);
     // xdrotary_embedding_pos_offset
-    std::memcpy(data + offset, &req->xdrotary_embedding_pos_offset, sizeof(int64_t));
+    std::memcpy(static_cast<char*>(data) + offset, &req->xdrotary_embedding_pos_offset, sizeof(int64_t));
     offset += sizeof(int64_t);
 
     // attn_dp_group_id
-    std::memcpy(data + offset, &req->attn_dp_group_id, sizeof(uint32_t));
+    std::memcpy(static_cast<char*>(data) + offset, &req->attn_dp_group_id, sizeof(uint32_t));
     offset += sizeof(uint32_t);
   }
   bytes = offset;
@@ -275,7 +275,7 @@ Status ScheduleOutputParser::DeserializeWorkerInferRequest(
     void* data, std::vector<std::shared_ptr<WorkerInferRequest>>& worker_infer_reqs, size_t& bytes) {
   size_t offset = 0;
 
-  int req_num = *reinterpret_cast<int*>(data + offset);
+  int req_num = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
   offset += sizeof(int);
 
   size_t inner_bytes;
@@ -284,55 +284,55 @@ Status ScheduleOutputParser::DeserializeWorkerInferRequest(
     std::shared_ptr<WorkerInferRequest> req = std::make_shared<WorkerInferRequest>();
 
     // req_id
-    req->req_id = *reinterpret_cast<int64_t*>(data + offset);
+    req->req_id = *reinterpret_cast<int64_t*>(static_cast<char*>(data) + offset);
     offset += sizeof(int64_t);
 
     // model_name
-    int model_name_size = *reinterpret_cast<int*>(data + offset);
+    int model_name_size = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
     offset += sizeof(int);
 
     std::string model_name;
-    model_name.assign(reinterpret_cast<char*>(data + offset), model_name_size);
+    model_name.assign(reinterpret_cast<char*>(static_cast<char*>(data) + offset), model_name_size);
     req->model_name = model_name;
     offset += model_name_size;
 
     // forwarding_tokens
     std::vector<int> forwarding_tokens;
-    DeserializeVector(data + offset, forwarding_tokens, inner_bytes);
+    DeserializeVector(static_cast<char*>(data) + offset, forwarding_tokens, inner_bytes);
     req->forwarding_tokens = forwarding_tokens;
     offset += inner_bytes;
 
     // infer_stage
-    req->infer_stage = *reinterpret_cast<InferStage*>(data + offset);
+    req->infer_stage = *reinterpret_cast<InferStage*>(static_cast<char*>(data) + offset);
     offset += sizeof(InferStage);
 
     // step
-    req->step = *reinterpret_cast<int*>(data + offset);
+    req->step = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
     offset += sizeof(int);
 
     // kv_cache_blocks
     std::vector<std::vector<int>> kv_cache_blocks;
-    DeserializeVectorOfVector(data + offset, kv_cache_blocks, inner_bytes);
+    DeserializeVectorOfVector(static_cast<char*>(data) + offset, kv_cache_blocks, inner_bytes);
     req->kv_cache_blocks = kv_cache_blocks;
     offset += inner_bytes;
 
     // prefix_cache_len
-    req->prefix_cache_len = *reinterpret_cast<int*>(data + offset);
+    req->prefix_cache_len = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
     offset += sizeof(int);
 
     // kv_cached_token_num
-    req->kv_cached_token_num = *reinterpret_cast<int*>(data + offset);
+    req->kv_cached_token_num = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
     offset += sizeof(int);
 
     // mrotary_embedding_pos_offset.
-    req->mrotary_embedding_pos_offset = *reinterpret_cast<int64_t*>(data + offset);
+    req->mrotary_embedding_pos_offset = *reinterpret_cast<int64_t*>(static_cast<char*>(data) + offset);
     offset += sizeof(int64_t);
     // xdrotary_embedding_pos_offset.
-    req->xdrotary_embedding_pos_offset = *reinterpret_cast<int64_t*>(data + offset);
+    req->xdrotary_embedding_pos_offset = *reinterpret_cast<int64_t*>(static_cast<char*>(data) + offset);
     offset += sizeof(int64_t);
 
     // attn_dp_group_id
-    req->attn_dp_group_id = *reinterpret_cast<uint32_t*>(data + offset);
+    req->attn_dp_group_id = *reinterpret_cast<uint32_t*>(static_cast<char*>(data) + offset);
     offset += sizeof(uint32_t);
 
     // Get model instance from data hub.
@@ -352,58 +352,58 @@ Status ScheduleOutputParser::SerializeScheduleOutput(const ScheduleOutput* sched
   size_t offset = 0;
 
   // multi_batch_id
-  std::memcpy(data + offset, &schedule_output->multi_batch_id, sizeof(size_t));
+  std::memcpy(static_cast<char*>(data) + offset, &schedule_output->multi_batch_id, sizeof(size_t));
   offset += sizeof(size_t);
 
   size_t bytes;
 
   // finished reqs.
   int vec_size = schedule_output->finish_req_ids.size();
-  std::memcpy(data + offset, &vec_size, sizeof(int));
+  std::memcpy(static_cast<char*>(data) + offset, &vec_size, sizeof(int));
   offset += sizeof(int);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
-    SerializeVector(schedule_output->finish_req_ids[dp_idx], data + offset, bytes);
+    SerializeVector(schedule_output->finish_req_ids[dp_idx], static_cast<char*>(data) + offset, bytes);
     offset += bytes;
   }
 
   // merged swapout reqs
   vec_size = schedule_output->merged_swapout_req_ids.size();
-  std::memcpy(data + offset, &vec_size, sizeof(int));
+  std::memcpy(static_cast<char*>(data) + offset, &vec_size, sizeof(int));
   offset += sizeof(int);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
-    SerializeVector(schedule_output->merged_swapout_req_ids[dp_idx], data + offset, bytes);
+    SerializeVector(schedule_output->merged_swapout_req_ids[dp_idx], static_cast<char*>(data) + offset, bytes);
     offset += bytes;
   }
 
   // merged swapin reqs
   vec_size = schedule_output->merged_swapin_req_ids.size();
-  std::memcpy(data + offset, &vec_size, sizeof(int));
+  std::memcpy(static_cast<char*>(data) + offset, &vec_size, sizeof(int));
   offset += sizeof(int);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
-    SerializeVector(schedule_output->merged_swapin_req_ids[dp_idx], data + offset, bytes);
+    SerializeVector(schedule_output->merged_swapin_req_ids[dp_idx], static_cast<char*>(data) + offset, bytes);
     offset += bytes;
   }
 
   // swapout req with blocks.
   vec_size = schedule_output->swapout_req_block_ids.size();
-  std::memcpy(data + offset, &vec_size, sizeof(int));
+  std::memcpy(static_cast<char*>(data) + offset, &vec_size, sizeof(int));
   offset += sizeof(int);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
-    SerializeKeyToVector(schedule_output->swapout_req_block_ids[dp_idx], data + offset, bytes);
+    SerializeKeyToVector(schedule_output->swapout_req_block_ids[dp_idx], static_cast<char*>(data) + offset, bytes);
     offset += bytes;
   }
 
   // swapin req with blocks.
   vec_size = schedule_output->swapin_req_block_ids.size();
-  std::memcpy(data + offset, &vec_size, sizeof(int));
+  std::memcpy(static_cast<char*>(data) + offset, &vec_size, sizeof(int));
   offset += sizeof(int);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
-    SerializeKeyToVector(schedule_output->swapin_req_block_ids[dp_idx], data + offset, bytes);
+    SerializeKeyToVector(schedule_output->swapin_req_block_ids[dp_idx], static_cast<char*>(data) + offset, bytes);
     offset += bytes;
   }
 
   // running reqs.
-  SerializeAsWorkerInferRequest(schedule_output->running_reqs, data + offset, bytes);
+  SerializeAsWorkerInferRequest(schedule_output->running_reqs, static_cast<char*>(data) + offset, bytes);
   offset += bytes;
 
   return Status();
@@ -413,69 +413,69 @@ Status ScheduleOutputParser::DeserializeScheduleOutput(void* data, ScheduleOutpu
   size_t offset = 0;
 
   // multi_batch_id
-  schedule_output->multi_batch_id = *reinterpret_cast<size_t*>(data + offset);
+  schedule_output->multi_batch_id = *reinterpret_cast<size_t*>(static_cast<char*>(data) + offset);
   offset += sizeof(size_t);
 
   size_t bytes;
 
   // finished reqs
-  int vec_size = *reinterpret_cast<int*>(data + offset);
+  int vec_size = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
   offset += sizeof(int);
   schedule_output->finish_req_ids.resize(vec_size);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
     std::vector<int64_t> finish_req_ids;
-    DeserializeVector(data + offset, finish_req_ids, bytes);
+    DeserializeVector(static_cast<char*>(data) + offset, finish_req_ids, bytes);
     schedule_output->finish_req_ids[dp_idx] = finish_req_ids;
     offset += bytes;
   }
 
   // merged swapout reqs
-  vec_size = *reinterpret_cast<int*>(data + offset);
+  vec_size = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
   offset += sizeof(int);
   schedule_output->merged_swapout_req_ids.resize(vec_size);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
     std::vector<int64_t> merged_swapout_req_ids;
-    DeserializeVector(data + offset, merged_swapout_req_ids, bytes);
+    DeserializeVector(static_cast<char*>(data) + offset, merged_swapout_req_ids, bytes);
     schedule_output->merged_swapout_req_ids[dp_idx] = merged_swapout_req_ids;
     offset += bytes;
   }
 
   // merged swapin reqs
-  vec_size = *reinterpret_cast<int*>(data + offset);
+  vec_size = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
   offset += sizeof(int);
   schedule_output->merged_swapin_req_ids.resize(vec_size);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
     std::vector<int64_t> merged_swapin_req_ids;
-    DeserializeVector(data + offset, merged_swapin_req_ids, bytes);
+    DeserializeVector(static_cast<char*>(data) + offset, merged_swapin_req_ids, bytes);
     schedule_output->merged_swapin_req_ids[dp_idx] = merged_swapin_req_ids;
     offset += bytes;
   }
 
   // swapout req with blocks.
-  vec_size = *reinterpret_cast<int*>(data + offset);
+  vec_size = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
   offset += sizeof(int);
   schedule_output->swapout_req_block_ids.resize(vec_size);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
     std::unordered_map<int64_t, std::vector<int>> swapout_req_block_ids;
-    DeserializeKeyToVector(data + offset, swapout_req_block_ids, bytes);
+    DeserializeKeyToVector(static_cast<char*>(data) + offset, swapout_req_block_ids, bytes);
     schedule_output->swapout_req_block_ids[dp_idx] = swapout_req_block_ids;
     offset += bytes;
   }
 
   // swapin req with blocks.
-  vec_size = *reinterpret_cast<int*>(data + offset);
+  vec_size = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
   offset += sizeof(int);
   schedule_output->swapin_req_block_ids.resize(vec_size);
   for (int dp_idx = 0; dp_idx < vec_size; ++dp_idx) {
     std::unordered_map<int64_t, std::vector<int>> swapin_req_block_ids;
-    DeserializeKeyToVector(data + offset, swapin_req_block_ids, bytes);
+    DeserializeKeyToVector(static_cast<char*>(data) + offset, swapin_req_block_ids, bytes);
     schedule_output->swapin_req_block_ids[dp_idx] = swapin_req_block_ids;
     offset += bytes;
   }
 
   // running reqs.
   std::vector<std::shared_ptr<WorkerInferRequest>> worker_running_reqs;
-  DeserializeWorkerInferRequest(data + offset, worker_running_reqs, bytes);
+  DeserializeWorkerInferRequest(static_cast<char*>(data) + offset, worker_running_reqs, bytes);
   schedule_output->worker_running_reqs = worker_running_reqs;
   offset += bytes;
 

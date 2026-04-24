@@ -123,7 +123,7 @@ Status PytorchSafetensorFileLoader::LoadModelWeights(const std::vector<std::stri
     const size_t tensor_beg_index = tensor_data["data_offsets"][0];
     const DataType tensor_dtype = GetTensorDataType(tensor_data["dtype"]);
     result[weight_name] = Tensor(MemoryLocation::LOCATION_HOST, tensor_dtype, tensor_shape, -1,
-                                 reinterpret_cast<void*>(data_ptr) + tensor_beg_index);
+                                 reinterpret_cast<void*>(reinterpret_cast<char*>(data_ptr) + tensor_beg_index));
   }
 
   return Status();

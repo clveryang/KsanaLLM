@@ -22,7 +22,9 @@ inline ScalarType GetScalarType();
 GET_SCALAR_TYPE(float, ScalarType::Float);
 GET_SCALAR_TYPE(half, ScalarType::Float16);
 GET_SCALAR_TYPE(__nv_bfloat16, ScalarType::BFloat16);
+#ifndef ENABLE_ILUVATAR
 GET_SCALAR_TYPE(__nv_fp8_e4m3, ScalarType::Float8_e4m3fn);
+#endif
 GET_SCALAR_TYPE(int32_t, ScalarType::Int);
 GET_SCALAR_TYPE(char, ScalarType::Int8);
 GET_SCALAR_TYPE(int8_t, ScalarType::Int8);

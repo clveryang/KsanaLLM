@@ -25,7 +25,14 @@ InferenceServer::InferenceServer(const std::string &config_file, const EndpointC
   if (!attention_manager) {
     KLLM_THROW("The AttentionBackendManager is nullptr.");
   }
-  if (attention_manager->Initialize()) {
+  KLLM_LOG_INFO << "About to call attention_manager->Initialize()";
+  bool attn_ok = false;
+  try {
+    attn_ok = attention_manager->Initialize();
+  } catch (const std::exception& e) {
+    KLLM_LOG_ERROR << "Exception in attention_manager->Initialize(): " << e.what();
+  }
+  if (attn_ok) {
     KLLM_LOG_INFO << "Attention backend initialized.";
   } else {
     KLLM_LOG_ERROR << "Failed to initialize attention backend.";

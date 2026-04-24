@@ -34,6 +34,10 @@ class MultiHeadAttention {
 
   std::shared_ptr<Add> adds_;
 
+  int layer_idx_ = -1;
+  int num_heads_ = 0;
+  int num_kv_heads_ = 0;
+  int head_dim_ = 0;
   bool add_qkv_bias_;
   Tensor qkv_bais_;
   std::shared_ptr<Linear> attn_qkv_projs_;

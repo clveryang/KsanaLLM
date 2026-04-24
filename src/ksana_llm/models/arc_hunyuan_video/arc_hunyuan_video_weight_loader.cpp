@@ -107,7 +107,7 @@ Status ArcHunyuanVideoWeightLoader::ProcessModelWeights(
                    {host_weight_tensor.shape[0] / 2, host_weight_tensor.shape[1]}, host_weight_tensor.device_id,
                    host_weight_tensor.GetPtr<void>());
       Tensor second(first.location, first.dtype, first.shape, first.device_id,
-                    host_weight_tensor.GetPtr<void>() + first.GetTotalBytes());
+                    static_cast<char*>(host_weight_tensor.GetPtr<void>()) + first.GetTotalBytes());
       Tensor swapped_tensor;
       common_weight_loader_->Concat({second, first}, swapped_tensor, dev_rank);
       Tensor dev_tensor;

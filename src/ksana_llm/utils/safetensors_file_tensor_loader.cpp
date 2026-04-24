@@ -67,10 +67,10 @@ void SafeTensorsLoader::LoadSafeTensors() {
 
   // get the tensor list(string)
   const size_t header_size = *reinterpret_cast<const size_t*>(data_ptr);
-  data_ptr += sizeof(header_size);
+  data_ptr = static_cast<char*>(data_ptr) + sizeof(header_size);
 
   const std::string_view tensor_dict_str(reinterpret_cast<const char*>(data_ptr), header_size);
-  data_ptr += header_size;
+  data_ptr = static_cast<char*>(data_ptr) + header_size;
   KLLM_LOG_DEBUG << fmt::format("Safetensors file {} Header = {}", file_name_, tensor_dict_str);
 
   // Parsing JSON to retrieve tensor information.
@@ -95,7 +95,7 @@ void SafeTensorsLoader::LoadSafeTensors() {
     const size_t tensor_begin_index = tensor_data["data_offsets"][0];
     const size_t tensor_end_index = tensor_data["data_offsets"][1];
     tensor_size_map_[tensor_name] = tensor_end_index - tensor_begin_index;
-    tensor_ptr_map_[tensor_name] = reinterpret_cast<void*>(data_ptr) + tensor_begin_index;
+    tensor_ptr_map_[tensor_name] = reinterpret_cast<void*>(static_cast<char*>(data_ptr) + tensor_begin_index);
   }
 }
 

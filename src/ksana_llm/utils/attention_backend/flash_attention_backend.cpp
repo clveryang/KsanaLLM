@@ -37,10 +37,15 @@ bool FlashAttentionBackend::Initialize() {
 
   // 2. 获取并检查 CUDA compute capability
   int compute_capability = GetCudaComputeCapability();
+#ifdef ENABLE_ILUVATAR
+  // Iluvatar MR-V100 reports compute_capability 71 but has flash_attn 2.6.3+corex
+  KLLM_LOG_INFO << "Iluvatar: bypassing compute capability check (reported " << compute_capability << ")";
+#else
   if (compute_capability < 80) {  // SM 8.0 及以上支持 FlashAttention 2
     KLLM_LOG_WARNING << "Compute capability " << compute_capability << " not support FlashAttention 2";
     return false;
   }
+#endif
 
   // 3. 确定所有可用的库信息
   std::vector<LibraryInfo> available_libraries = DetermineAllLibraries(compute_capability);
@@ -169,7 +174,11 @@ std::vector<FlashAttentionBackend::LibraryInfo> FlashAttentionBackend::Determine
     }
   }
 
+#ifdef ENABLE_ILUVATAR
+  if (true) {  // Iluvatar has flash_attn 2.6.3+corex regardless of reported CC
+#else
   if (compute_capability >= 80) {
+#endif
     // 2. 检查 VLLM FlashAttention 2
     LibraryInfo vllm_info = GetVllmFlashAttentionLibInfo();
     if (!vllm_info.path.empty() && IsVersionGreaterOrEqual(vllm_info.version, "2.6.0")) {

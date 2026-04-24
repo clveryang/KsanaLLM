@@ -64,7 +64,7 @@ class QuantWeightTest : public testing::Test {
                 context_->GetMemoryManageStreams()[device_rank]);
     __nv_fp8_e4m3 fp8_value2 = __nv_fp8_e4m3(value2);
     std::vector<__nv_fp8_e4m3> fp8_data2((tensor.GetElementNumber() / 4), fp8_value2);
-    MemcpyAsync(tensor.GetPtr<void>() + (tensor.GetTotalBytes() / 4 * 3), fp8_data2.data(), tensor.GetTotalBytes() / 4,
+    MemcpyAsync(static_cast<char*>(tensor.GetPtr<void>()) + (tensor.GetTotalBytes() / 4 * 3), fp8_data2.data(), tensor.GetTotalBytes() / 4,
                 MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[device_rank]);
   }
 

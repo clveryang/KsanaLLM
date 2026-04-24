@@ -280,14 +280,14 @@ Status NewDeepSeekV3WeightLoader::ProcessModelWeights(const std::unordered_map<s
 
         Tensor& up_gate_experts_tensor = device_model_weights.at(up_gate_experts_name);
         if (file_weight_name.find(".up_proj.") != std::string::npos) {
-          MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + static_cast<size_t>(expert_idx_) * double_expert_pitch +
+          MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + static_cast<size_t>(expert_idx_) * double_expert_pitch +
                           (use_vllm_moe ? expert_pitch : 0),
-                      host_weight_tensor.GetPtr<void>() + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
+                      static_cast<char*>(host_weight_tensor.GetPtr<void>()) + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
                       context_->GetMemoryManageStreams()[dev_rank]);
         } else if (file_weight_name.find(".gate_proj.") != std::string::npos) {
-          MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + static_cast<size_t>(expert_idx_) * double_expert_pitch +
+          MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + static_cast<size_t>(expert_idx_) * double_expert_pitch +
                           (use_vllm_moe ? 0 : expert_pitch),
-                      host_weight_tensor.GetPtr<void>() + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
+                      static_cast<char*>(host_weight_tensor.GetPtr<void>()) + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
                       context_->GetMemoryManageStreams()[dev_rank]);
         }
         continue;
@@ -309,8 +309,8 @@ Status NewDeepSeekV3WeightLoader::ProcessModelWeights(const std::unordered_map<s
                                      ? (dev_rank / expert_parallel_config.expert_para_size) * dst_pitch
                                      : 0;
         Tensor& down_expert_tensor = device_model_weights.at(down_experts_name);
-        Memcpy2DAsync(down_expert_tensor.GetPtr<void>() + static_cast<size_t>(expert_idx_) * expert_pitch, dst_pitch,
-                      host_weight_tensor.GetPtr<void>() + src_down_offset, src_pitch, dst_pitch, hidden_units,
+        Memcpy2DAsync(static_cast<char*>(down_expert_tensor.GetPtr<void>()) + static_cast<size_t>(expert_idx_) * expert_pitch, dst_pitch,
+                      static_cast<char*>(host_weight_tensor.GetPtr<void>()) + src_down_offset, src_pitch, dst_pitch, hidden_units,
                       MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
         continue;
       }
@@ -349,7 +349,7 @@ Status NewDeepSeekV3WeightLoader::ProcessModelWeights(const std::unordered_map<s
           size_t para_pitch = DivRoundUp(head_num, attn_tp_size) * (qk_nope_head_dim + qk_rope_head_dim) *
                               host_weight_tensor.shape[1] * GetTypeSize(host_weight_tensor.dtype);
           size_t tensor_para_offset = attn_dev_rank * para_pitch;
-          MemcpyAsync(q_b_nope_rope_tensor.GetPtr<void>(), host_weight_tensor.GetPtr<void>() + tensor_para_offset,
+          MemcpyAsync(q_b_nope_rope_tensor.GetPtr<void>(), static_cast<char*>(host_weight_tensor.GetPtr<void>()) + tensor_para_offset,
                       para_pitch, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
 
           weight_impl_->PermuteWeight(q_b_nope_rope_tensor, {1, 0}, dev_rank);
@@ -369,7 +369,7 @@ Status NewDeepSeekV3WeightLoader::ProcessModelWeights(const std::unordered_map<s
           size_t para_pitch = DivRoundUp(head_num, attn_tp_size) * (qk_nope_head_dim + qk_rope_head_dim) *
                               host_weight_tensor.shape[1] * GetTypeSize(host_weight_tensor.dtype);
           size_t tensor_para_offset = attn_dev_rank * para_pitch;
-          MemcpyAsync(q_b_proj_tensor.GetPtr<void>(), host_weight_tensor.GetPtr<void>() + tensor_para_offset,
+          MemcpyAsync(q_b_proj_tensor.GetPtr<void>(), static_cast<char*>(host_weight_tensor.GetPtr<void>()) + tensor_para_offset,
                       para_pitch, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
 
           device_model_weights[q_b_proj_name] = q_b_proj_tensor;
@@ -417,7 +417,7 @@ Status NewDeepSeekV3WeightLoader::ProcessModelWeights(const std::unordered_map<s
                                 nullptr, &(context_->GetMemoryManageStreams()[dev_rank]));
         }
         const int offset = q_lora_rank * host_weight_tensor.shape[1] * host_weight_tensor.GetDTypeSize();
-        MemcpyAsync(fused_tensor.GetPtr<void>() + offset, host_weight_tensor.GetPtr<void>(),
+        MemcpyAsync(static_cast<char*>(fused_tensor.GetPtr<void>()) + offset, host_weight_tensor.GetPtr<void>(),
                     host_weight_tensor.GetTotalBytes(), MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[dev_rank]);
         if (device_model_weights.find(fused_tensor_name) == device_model_weights.end()) {
@@ -454,7 +454,7 @@ Status NewDeepSeekV3WeightLoader::ProcessModelWeights(const std::unordered_map<s
           size_t src_pitch =
               (qk_nope_head_dim + v_head_dim) * host_weight_tensor.shape[1] * GetTypeSize(host_weight_tensor.dtype);
           Memcpy2DAsync(kv_b_nope_tensor.GetPtr<void>(), nope_dst_pitch,
-                        host_weight_tensor.GetPtr<void>() + tensor_para_offset, src_pitch, nope_dst_pitch,
+                        static_cast<char*>(host_weight_tensor.GetPtr<void>()) + tensor_para_offset, src_pitch, nope_dst_pitch,
                         DivRoundUp(head_num, attn_tp_size), MEMCPY_HOST_TO_DEVICE,
                         context_->GetMemoryManageStreams()[dev_rank]);
 
@@ -474,7 +474,7 @@ Status NewDeepSeekV3WeightLoader::ProcessModelWeights(const std::unordered_map<s
                                         dev_rank, nullptr, &(context_->GetMemoryManageStreams()[dev_rank]));
           size_t v_head_dst_pitch = v_head_dim * host_weight_tensor.shape[1] * GetTypeSize(host_weight_tensor.dtype);
           Memcpy2DAsync(v_head_tensor.GetPtr<void>(), v_head_dst_pitch,
-                        host_weight_tensor.GetPtr<void>() + nope_dst_pitch + tensor_para_offset, src_pitch,
+                        static_cast<char*>(host_weight_tensor.GetPtr<void>()) + nope_dst_pitch + tensor_para_offset, src_pitch,
                         v_head_dst_pitch, DivRoundUp(head_num, attn_tp_size), MEMCPY_HOST_TO_DEVICE,
                         context_->GetMemoryManageStreams()[dev_rank]);
 
@@ -505,7 +505,7 @@ Status NewDeepSeekV3WeightLoader::ProcessModelWeights(const std::unordered_map<s
           size_t para_pitch = DivRoundUp(head_num, attn_tp_size) * (qk_nope_head_dim + v_head_dim) *
                               host_weight_tensor.shape[1] * GetTypeSize(host_weight_tensor.dtype);
           size_t tensor_para_offset = attn_dev_rank * para_pitch;
-          MemcpyAsync(kv_b_proj_tensor.GetPtr<void>(), host_weight_tensor.GetPtr<void>() + tensor_para_offset,
+          MemcpyAsync(kv_b_proj_tensor.GetPtr<void>(), static_cast<char*>(host_weight_tensor.GetPtr<void>()) + tensor_para_offset,
                       para_pitch, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
 
           device_model_weights[file_weight_name] = kv_b_proj_tensor;

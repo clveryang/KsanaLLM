@@ -39,6 +39,9 @@ option(WITH_ACL "Enable Ascend" OFF)
 # support Tencent ZiXiao
 option(WITH_TOPS "Enable Tops" OFF)
 
+# support Iluvatar Corex (BI/MR-V100 via clang++ ivcore)
+option(WITH_ILUVATAR "Enable Iluvatar Corex backend" OFF)
+
 option(WITH_TESTING "Enable testing" OFF)
 option(WITH_STANDALONE_TEST "Enable standalone testing" OFF)
 option(WITH_EVENT_RECORD "Enable event record" OFF)
@@ -64,7 +67,20 @@ endif()
 # Build external libraries statically by default
 set(BUILD_SHARED_LIBS OFF)
 
-if(WITH_CUDA)
+if(WITH_ILUVATAR)
+  # Iluvatar Corex backend — NO enable_language(CUDA) because the platform's
+  # nvcc is a dummy script; real compiler is clang++ with '-x ivcore'.
+  # All .cu files are compiled as C++ (LANGUAGE CXX) by ixrt-style convention.
+  set(COREX_VERSION "4.4.0" CACHE STRING "Iluvatar Corex version")
+  set(IXCOREX_ROOT "/usr/local/corex-${COREX_VERSION}")
+  set(CMAKE_C_COMPILER   "${IXCOREX_ROOT}/bin/clang")
+  set(CMAKE_CXX_COMPILER "${IXCOREX_ROOT}/bin/clang++")
+  set(IX_GPU_ARCH "ivcore11" CACHE STRING "Iluvatar target arch (ivcore11 for MR-V100)")
+  project(ksana_llm LANGUAGES CXX)
+  # Iluvatar Corex is CUDA-API compatible; we reuse the entire ENABLE_CUDA
+  # codepath for Tensor abstractions, and swap kernel calls to ixformer.
+  add_definitions(-DENABLE_ILUVATAR -D__ILUVATAR__ -DENABLE_CUDA)
+elseif(WITH_CUDA)
   # support NVIDIA GPU
   project(ksana_llm LANGUAGES CXX CUDA)
 elseif(WITH_ACL)
@@ -91,8 +107,8 @@ else()
   message(FATAL_ERROR "Support platform is not selected. Select NVIDIA GPU with -DWITH_CUDA=ON, Huawei NPU with -DWITH_ACL=ON and Tencent ZiXiao with -DWITH_TOPS=ON")
 endif()
 
-if(NOT WITH_CUDA AND NOT WITH_ACL AND NOT WITH_TOPS)
-  message(FATAL_ERROR "WITH_CUDA=OFF and WITH_ACL=OFF and WITH_TOPS=OFF is not allow")
+if(NOT WITH_CUDA AND NOT WITH_ACL AND NOT WITH_TOPS AND NOT WITH_ILUVATAR)
+  message(FATAL_ERROR "No backend selected. Set one of: -DWITH_CUDA=ON, -DWITH_ACL=ON, -DWITH_TOPS=ON, -DWITH_ILUVATAR=ON")
 endif()
 
 set(USE_CXX11_ABI, "False")
@@ -181,7 +197,14 @@ if(WITH_BOOST)
   include(external/boost)
 endif()
 
-include(LLM_kernels)
+if(NOT WITH_ILUVATAR)
+  include(LLM_kernels)
+else()
+  # Iluvatar: 跳过上游 3rdparty/LLM_kernels/CMakeLists.txt（该文件强制要求 WITH_CUDA/ACL/TOPS，
+  # 且会 include(nvidia)），直接进 csrc/ 走 iluvatar 分支。
+  add_subdirectory(3rdparty/LLM_kernels/csrc)
+  include_directories(3rdparty/LLM_kernels)
+endif()
 include(base)
 
 # set compiler flags
@@ -220,6 +243,10 @@ endif()
 
 if(WITH_TOPS)
   include(zixiao)
+endif()
+
+if(WITH_ILUVATAR)
+  include(iluvatar)
 endif()
 
 # set cmake output path
@@ -315,7 +342,13 @@ endif()
 include_directories(${PYTHON_INCLUDE_DIRS})
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 
+# 3rdparty/LLM_kernels:
+#   - WITH_CUDA   : 全量编译 nvidia/ + ascend/ + zixiao/（按各自 WITH_* 决定）
+#   - WITH_ILUVATAR: 仅编译 kernels/iluvatar/ 下需要的算子（复用 nvidia/ 源码），
+#     按优先级 embedding -> layernorm -> rotary -> paged_attention -> activation -> samplers 逐个接入。
 add_subdirectory(3rdparty)
 add_subdirectory(examples)
 add_subdirectory(src)
-add_subdirectory(tools)
+if(NOT WITH_ILUVATAR)
+  add_subdirectory(tools)
+endif()

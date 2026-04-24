@@ -4,6 +4,7 @@
 
 #include "ksana_llm/modules/attention/common_attention.h"
 
+#include "ksana_llm/utils/logger.h"
 namespace ksana_llm {
 
 CommonAttention::CommonAttention(int layer_idx, bool is_neox, bool use_qk_norm, LayerCreationContext& creation_context,
@@ -45,6 +46,7 @@ Status CommonAttention::Forward(std::vector<Tensor>& hidden_buffer_tensors_0,
     StreamWaitEvent(forwarding_context.GetContext()->GetComputeStreams()[forwarding_context.GetCurrentRank()],
                     forwarding_context.GetModelInput()->rotary_embedding_event);
   }
+
   if (forwarding_context.GetModelInput()->multi_token_request_num) {
     flash_attentions_->Forward(hidden_buffer_tensors_0, forwarding_context.GetModelInput(), hidden_buffer_tensors_1,
                                shared_buffer_tensors, forwarding_context.GetAttentionForwardContext(),

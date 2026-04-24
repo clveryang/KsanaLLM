@@ -73,7 +73,7 @@ Status NewDeepSeekV3WeightImpl<T>::TransSplitOptTrans(const Tensor& host_weight_
     slice_bytes = host_weight_tensor.GetTotalBytes() - slice_offset;
   }
 
-  MemcpyAsync(dev_tensor.GetPtr<void>(), full_dev_tensor.GetPtr<void>() + slice_offset, slice_bytes,
+  MemcpyAsync(dev_tensor.GetPtr<void>(), static_cast<char*>(full_dev_tensor.GetPtr<void>()) + slice_offset, slice_bytes,
               MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
 
   if (transpose) {
@@ -99,7 +99,7 @@ Status NewDeepSeekV3WeightImpl<T>::SplitOptTrans(const Tensor& host_weight_tenso
     slice_bytes = host_weight_tensor.GetTotalBytes() - slice_offset;
   }
 
-  MemcpyAsync(dev_tensor.GetPtr<void>(), host_weight_tensor.GetPtr<void>() + slice_offset, slice_bytes,
+  MemcpyAsync(dev_tensor.GetPtr<void>(), static_cast<char*>(host_weight_tensor.GetPtr<void>()) + slice_offset, slice_bytes,
               MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
   if (transpose) {
     PermuteWeight(dev_tensor, {1, 0}, dev_rank);
@@ -154,13 +154,13 @@ Status NewDeepSeekV3WeightImpl<T>::ProcessGateUpProjWeight(
   Tensor& gate_up_proj_tensor = device_model_weights[file_weight_name_replace];
   size_t total_bytes = gate_up_proj_tensor.GetTotalBytes() / 2;
   if (is_quant_weight) {
-    MemcpyAsync(gate_up_proj_tensor.GetPtr<void>() + concat_offset * total_bytes, dev_tensor.GetPtr<void>(),
+    MemcpyAsync(static_cast<char*>(gate_up_proj_tensor.GetPtr<void>()) + concat_offset * total_bytes, dev_tensor.GetPtr<void>(),
                 total_bytes, MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
   } else {
     gate_up_proj_tensor.shape = {dev_tensor.shape[0], dev_tensor.shape[1] * 2};
     size_t dst_pitch = gate_up_proj_tensor.shape[1] * GetTypeSize(gate_up_proj_tensor.dtype);
     size_t src_pitch = dev_tensor.shape[1] * GetTypeSize(dev_tensor.dtype);
-    Memcpy2DAsync(gate_up_proj_tensor.GetPtr<void>() + concat_offset * src_pitch, dst_pitch, dev_tensor.GetPtr<void>(),
+    Memcpy2DAsync(static_cast<char*>(gate_up_proj_tensor.GetPtr<void>()) + concat_offset * src_pitch, dst_pitch, dev_tensor.GetPtr<void>(),
                   src_pitch, src_pitch, dev_tensor.shape[0], MEMCPY_DEVICE_TO_DEVICE,
                   context_->GetMemoryManageStreams()[dev_rank]);
   }
@@ -270,7 +270,7 @@ Status NewDeepSeekV3WeightImpl<T>::PostProcessFp8E4m3BlockWiseQuantWeights(
       size_t v_head_dst_pitch =
           v_head_dim * dequant_kv_b_proj.shape[1] * GetTypeSize(new_deepseek_v3_config->weight_data_type);
       Memcpy2DAsync(dequant_v_head_proj.GetPtr<void>(), v_head_dst_pitch,
-                    dequant_kv_b_proj.GetPtr<void>() + nope_dst_pitch, src_pitch, v_head_dst_pitch, head_num_tp,
+                    static_cast<char*>(dequant_kv_b_proj.GetPtr<void>()) + nope_dst_pitch, src_pitch, v_head_dst_pitch, head_num_tp,
                     MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
       // For the latest weight absorption version process
       // Copy dequant kv_b_proj to w_uk_t
@@ -413,12 +413,12 @@ bool NewDeepSeekV3WeightImpl<T>::LoadMoeFp8E4m3BlockWiseScale(
     if (host_weight_name.find(".gate_proj.") != std::string::npos) {
       MemcpyAsync(device_model_weights.at(up_gate_experts_scale_name).GetPtr<void>() +
                       static_cast<size_t>(expert_idx) * double_expert_scale_pitch,
-                  host_weight_tensor.GetPtr<void>() + src_upgate_offset, expert_scale_pitch, MEMCPY_HOST_TO_DEVICE,
+                  static_cast<char*>(host_weight_tensor.GetPtr<void>()) + src_upgate_offset, expert_scale_pitch, MEMCPY_HOST_TO_DEVICE,
                   context_->GetMemoryManageStreams()[dev_rank]);
     } else if (host_weight_name.find(".up_proj.") != std::string::npos) {
       MemcpyAsync(device_model_weights.at(up_gate_experts_scale_name).GetPtr<void>() +
                       static_cast<size_t>(expert_idx) * double_expert_scale_pitch + expert_scale_pitch,
-                  host_weight_tensor.GetPtr<void>() + src_upgate_offset, expert_scale_pitch, MEMCPY_HOST_TO_DEVICE,
+                  static_cast<char*>(host_weight_tensor.GetPtr<void>()) + src_upgate_offset, expert_scale_pitch, MEMCPY_HOST_TO_DEVICE,
                   context_->GetMemoryManageStreams()[dev_rank]);
     }
   }
@@ -442,7 +442,7 @@ bool NewDeepSeekV3WeightImpl<T>::LoadMoeFp8E4m3BlockWiseScale(
 
     Memcpy2DAsync(device_model_weights.at(down_experts_scale_name).GetPtr<void>() +
                       static_cast<size_t>(expert_idx) * expert_scale_pitch,
-                  dst_pitch, host_weight_tensor.GetPtr<void>() + src_down_offset, src_pitch, dst_pitch,
+                  dst_pitch, static_cast<char*>(host_weight_tensor.GetPtr<void>()) + src_down_offset, src_pitch, dst_pitch,
                   down_experts_scale_shape[1], MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
   }
   return true;
@@ -521,7 +521,7 @@ bool NewDeepSeekV3WeightImpl<T>::LoadMlaFp8E4m3BlockWiseScale(
 
     Tensor weight_scale_tensor = Tensor(MemoryLocation::LOCATION_DEVICE, DataType::TYPE_FP32, q_b_proj_scale_shape,
                                         dev_rank, nullptr, &(context_->GetMemoryManageStreams()[dev_rank]));
-    MemcpyAsync(weight_scale_tensor.GetPtr<void>(), host_weight_tensor.GetPtr<void>() + tensor_para_offset,
+    MemcpyAsync(weight_scale_tensor.GetPtr<void>(), static_cast<char*>(host_weight_tensor.GetPtr<void>()) + tensor_para_offset,
                 weight_scale_tensor.GetTotalBytes(), MEMCPY_HOST_TO_DEVICE,
                 context_->GetMemoryManageStreams()[dev_rank]);
     device_model_weights[host_weight_name] = weight_scale_tensor;
@@ -543,7 +543,7 @@ bool NewDeepSeekV3WeightImpl<T>::LoadMlaFp8E4m3BlockWiseScale(
     }
     const size_t offset =
         (q_lora_rank / weight_block_size) * host_weight_tensor.shape[1] * host_weight_tensor.GetDTypeSize();
-    MemcpyAsync(fused_tensor.GetPtr<void>() + offset, host_weight_tensor.GetPtr<void>(),
+    MemcpyAsync(static_cast<char*>(fused_tensor.GetPtr<void>()) + offset, host_weight_tensor.GetPtr<void>(),
                 host_weight_tensor.GetTotalBytes(), MEMCPY_HOST_TO_DEVICE,
                 context_->GetMemoryManageStreams()[dev_rank]);
 
@@ -561,7 +561,7 @@ bool NewDeepSeekV3WeightImpl<T>::LoadMlaFp8E4m3BlockWiseScale(
 
     Tensor weight_scale_tensor = Tensor(MemoryLocation::LOCATION_DEVICE, DataType::TYPE_FP32, kv_b_proj_scale_shape,
                                         dev_rank, nullptr, &(context_->GetMemoryManageStreams()[dev_rank]));
-    MemcpyAsync(weight_scale_tensor.GetPtr<void>(), host_weight_tensor.GetPtr<void>() + tensor_para_offset,
+    MemcpyAsync(weight_scale_tensor.GetPtr<void>(), static_cast<char*>(host_weight_tensor.GetPtr<void>()) + tensor_para_offset,
                 weight_scale_tensor.GetTotalBytes(), MEMCPY_HOST_TO_DEVICE,
                 context_->GetMemoryManageStreams()[dev_rank]);
     device_model_weights[host_weight_name] = weight_scale_tensor;
@@ -659,11 +659,11 @@ Status NewDeepSeekV3WeightImpl<T>::LoadInt4QuantWeight(std::unordered_map<std::s
           }
           Tensor& up_gate_experts_tensor = device_model_weights.at(up_gate_experts_name);
           if (host_weight_name.find(".up_proj.") != std::string::npos) {
-            MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + expert_idx_ * input_scale_size * 2,
+            MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + expert_idx_ * input_scale_size * 2,
                         host_weight_tensor.template GetPtr<void>(), input_scale_size, MEMCPY_HOST_TO_DEVICE,
                         context_->GetMemoryManageStreams()[dev_rank]);
           } else if (host_weight_name.find(".gate_proj.") != std::string::npos) {
-            MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + expert_idx_ * input_scale_size * 2 + input_scale_size,
+            MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + expert_idx_ * input_scale_size * 2 + input_scale_size,
                         host_weight_tensor.template GetPtr<void>(), input_scale_size, MEMCPY_HOST_TO_DEVICE,
                         context_->GetMemoryManageStreams()[dev_rank]);
           }
@@ -677,7 +677,7 @@ Status NewDeepSeekV3WeightImpl<T>::LoadInt4QuantWeight(std::unordered_map<std::s
                        nullptr, &(context_->GetMemoryManageStreams()[dev_rank]));
           }
           Tensor& down_experts_tensor = device_model_weights.at(down_experts_name);
-          MemcpyAsync(down_experts_tensor.GetPtr<void>() + expert_idx_ * input_scale_size,
+          MemcpyAsync(static_cast<char*>(down_experts_tensor.GetPtr<void>()) + expert_idx_ * input_scale_size,
                       host_weight_tensor.template GetPtr<void>(), input_scale_size, MEMCPY_HOST_TO_DEVICE,
                       context_->GetMemoryManageStreams()[dev_rank]);
           continue;
@@ -717,12 +717,12 @@ Status NewDeepSeekV3WeightImpl<T>::LoadInt4QuantWeight(std::unordered_map<std::s
         Tensor& up_gate_experts_tensor = device_model_weights.at(up_gate_experts_name);
         // TODO(jinxcwu) up_gate权重名字有问题，实际是up在后，gate在前
         if (host_weight_name.find(".up_proj.") != std::string::npos) {
-          MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + expert_idx_ * double_expert_pitch + expert_pitch,
-                      dev_tensor.GetPtr<void>() + src_upgate_offset, expert_pitch, MEMCPY_DEVICE_TO_DEVICE,
+          MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + expert_idx_ * double_expert_pitch + expert_pitch,
+                      static_cast<char*>(dev_tensor.GetPtr<void>()) + src_upgate_offset, expert_pitch, MEMCPY_DEVICE_TO_DEVICE,
                       context_->GetMemoryManageStreams()[dev_rank]);
         } else if (host_weight_name.find(".gate_proj.") != std::string::npos) {
-          MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + expert_idx_ * double_expert_pitch,
-                      dev_tensor.GetPtr<void>() + src_upgate_offset, expert_pitch, MEMCPY_DEVICE_TO_DEVICE,
+          MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + expert_idx_ * double_expert_pitch,
+                      static_cast<char*>(dev_tensor.GetPtr<void>()) + src_upgate_offset, expert_pitch, MEMCPY_DEVICE_TO_DEVICE,
                       context_->GetMemoryManageStreams()[dev_rank]);
         }
         continue;
@@ -750,8 +750,8 @@ Status NewDeepSeekV3WeightImpl<T>::LoadInt4QuantWeight(std::unordered_map<std::s
         size_t expert_pitch = down_inter_size_per_rank * hidden_units * GetTypeSize(dev_tensor.dtype);
         size_t src_down_offset = new_deepseek_v3_config->moe_tensor_para_size > 1 ? moe_tp_rank * dst_pitch : 0;
         Tensor& down_experts_tensor = device_model_weights.at(down_experts_name);
-        Memcpy2DAsync(down_experts_tensor.GetPtr<void>() + expert_idx_ * expert_pitch, dst_pitch,
-                      dev_tensor.GetPtr<void>() + src_down_offset, src_pitch, dst_pitch, hidden_units,
+        Memcpy2DAsync(static_cast<char*>(down_experts_tensor.GetPtr<void>()) + expert_idx_ * expert_pitch, dst_pitch,
+                      static_cast<char*>(dev_tensor.GetPtr<void>()) + src_down_offset, src_pitch, dst_pitch, hidden_units,
                       MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
         continue;
       }
@@ -808,7 +808,7 @@ Status NewDeepSeekV3WeightImpl<T>::LoadInt4QuantWeight(std::unordered_map<std::s
                                          {host_weight_tensor.shape[0], qk_rope_head_dim}, dev_rank);
         size_t kv_a_rope_pitch = qk_rope_head_dim * GetTypeSize(host_weight_tensor.dtype);
         Memcpy2DAsync(kv_a_rope_tensor.GetPtr<void>(), kv_a_rope_pitch,
-                      host_weight_tensor.template GetPtr<void>() + kv_a_lora_pitch, host_tensor_pitch, kv_a_rope_pitch,
+                      static_cast<char*>(host_weight_tensor.template GetPtr<void>()) + kv_a_lora_pitch, host_tensor_pitch, kv_a_rope_pitch,
                       host_weight_tensor.shape[0], MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[dev_rank]);
         device_model_weights[kv_a_rope_name] = kv_a_rope_tensor;
         continue;
@@ -842,7 +842,7 @@ Status NewDeepSeekV3WeightImpl<T>::LoadInt4QuantWeight(std::unordered_map<std::s
                                       &(context_->GetMemoryManageStreams()[dev_rank]));
         size_t v_head_dst_pitch = v_head_dim * GetTypeSize(host_weight_tensor.dtype);
         Memcpy2DAsync(v_head_tensor.GetPtr<void>(), v_head_dst_pitch,
-                      dev_tensor.template GetPtr<void>() + nope_dst_pitch, src_pitch, v_head_dst_pitch,
+                      static_cast<char*>(dev_tensor.template GetPtr<void>()) + nope_dst_pitch, src_pitch, v_head_dst_pitch,
                       host_weight_tensor.shape[0] * head_num_tp, MEMCPY_DEVICE_TO_DEVICE,
                       context_->GetMemoryManageStreams()[dev_rank]);
         device_model_weights[v_head_name] = v_head_tensor;
@@ -1116,8 +1116,8 @@ Tensor NewDeepSeekV3WeightImpl<T>::MarlinPermuteScales(Tensor& s, int dev_rank, 
                                  permute_s.GetPtr<void>(), k, n, group_size);
   } else if (s.shape.size() == 3) {  // first dim is num_experts
     for (size_t i = 0; i < s.shape[0]; i++) {
-      InvokeMarlinPermuteScales<T>(context_->GetMemoryManageStreams()[dev_rank].Get(), s.GetPtr<void>() + i * k * n,
-                                   permute_s.GetPtr<void>() + i * k * n, k, n, group_size);
+      InvokeMarlinPermuteScales<T>(context_->GetMemoryManageStreams()[dev_rank].Get(), static_cast<char*>(s.GetPtr<void>()) + i * k * n,
+                                   static_cast<char*>(permute_s.GetPtr<void>()) + i * k * n, k, n, group_size);
     }
   }
   return permute_s;

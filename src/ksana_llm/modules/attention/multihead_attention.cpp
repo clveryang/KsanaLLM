@@ -15,13 +15,19 @@
 #include "ksana_llm/utils/request.h"
 #include "ksana_llm/utils/singleton.h"
 #include "ksana_llm/utils/string_utils.h"
-
 namespace ksana_llm {
 
 MultiHeadAttention::MultiHeadAttention(int layer_idx, bool is_neox, bool add_qkv_bias, bool use_qk_norm,
                                        LayerCreationContext& creation_context,
                                        ModelCreationConfig& model_creation_config)
-    : add_qkv_bias_(add_qkv_bias) {
+    : layer_idx_(layer_idx),
+      num_heads_((int)(model_creation_config.attn_config.model_config.head_num /
+                       std::max<size_t>(1, creation_context.runtime_config.parallel_basic_config.tensor_parallel_size))),
+      num_kv_heads_((int)std::max<size_t>(
+          1, model_creation_config.attn_config.model_config.num_key_value_heads /
+                 std::max<size_t>(1, creation_context.runtime_config.parallel_basic_config.tensor_parallel_size))),
+      head_dim_((int)model_creation_config.attn_config.model_config.size_per_head),
+      add_qkv_bias_(add_qkv_bias) {
   const std::string layer_prefix = fmt::format("model.layers.{}", layer_idx);
 
   attn_qkv_projs_ = std::make_shared<Linear>(layer_prefix + ".self_attn.query_key_value.weight", creation_context,

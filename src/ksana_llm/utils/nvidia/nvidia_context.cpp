@@ -177,7 +177,7 @@ void NvidiaContextExtension<T>::Initialize() {
   is_multicast_enable_ = (base_ptr_->tensor_parallel_size_ > 4);
   for (size_t worker_id = 0; worker_id < base_ptr_->tensor_parallel_size_ && is_multicast_enable_; ++worker_id) {
     int multicast_supported = 0;
-    CU_CHECK(cuDeviceGetAttribute(&multicast_supported, CU_DEVICE_ATTRIBUTE_MULTICAST_SUPPORTED, worker_id));
+    CU_CHECK(cuDeviceGetAttribute(&multicast_supported, (CUdevice_attribute)0 /* CU_DEVICE_ATTRIBUTE_MULTICAST_SUPPORTED unavailable on Iluvatar */, worker_id));
     is_multicast_enable_ &= (multicast_supported != 0);
   }
   if (is_multicast_enable_) {

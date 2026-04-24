@@ -81,12 +81,12 @@ Status Internlm2Weight<T>::LoadWeightsFromFile(const std::shared_ptr<BaseFileTen
         q_para_offset *= q_size;
         kv_para_offset *= qkv_pitch;
 
-        MemcpyAsync(qkv_weight_tensor.GetPtr<void>(), weight_ptr + q_para_offset, q_size, MEMCPY_HOST_TO_DEVICE,
+        MemcpyAsync(qkv_weight_tensor.GetPtr<void>(), static_cast<char*>(weight_ptr) + q_para_offset, q_size, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
-        MemcpyAsync(qkv_weight_tensor.GetPtr<void>() + q_size, weight_ptr + q_size * tensor_para_size_ + kv_para_offset,
+        MemcpyAsync(static_cast<char*>(qkv_weight_tensor.GetPtr<void>()) + q_size, static_cast<char*>(weight_ptr) + q_size * tensor_para_size_ + kv_para_offset,
                     qkv_pitch, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
-        MemcpyAsync(qkv_weight_tensor.GetPtr<void>() + q_size + qkv_pitch,
-                    weight_ptr + kv_para_offset + (q_size + qkv_pitch) * tensor_para_size_, qkv_pitch,
+        MemcpyAsync(static_cast<char*>(qkv_weight_tensor.GetPtr<void>()) + q_size + qkv_pitch,
+                    static_cast<char*>(weight_ptr) + kv_para_offset + (q_size + qkv_pitch) * tensor_para_size_, qkv_pitch,
                     MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
       } else {
         KLLM_LOG_DEBUG << "state_dict[" << tensor_name << "] will not be used";

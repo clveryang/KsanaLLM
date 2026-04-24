@@ -347,7 +347,7 @@ Status CommonWeight<T>::LoadWeightsFromFile(const std::shared_ptr<BaseFileTensor
           single_proj_size *= head_num / num_kv_heads;
         }
         tensor_para_offset *= single_proj_size;
-        MemcpyAsync(qkv_weight_tensor.GetPtr<void>() + saved_offset, weight_ptr + tensor_para_offset, single_proj_size,
+        MemcpyAsync(static_cast<char*>(qkv_weight_tensor.GetPtr<void>()) + saved_offset, static_cast<char*>(weight_ptr) + tensor_para_offset, single_proj_size,
                     MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
       }
     } else if (tensor_name.find("_proj.") != std::string::npos || tensor_name.find("norm.") != std::string::npos ||
@@ -440,17 +440,17 @@ Status CommonWeight<T>::LoadWeightsFromFile(const std::shared_ptr<BaseFileTensor
         size_t total_group_q_size = q_heads_per_group * q_head_size;
         size_t dst_q_offset = local_group * total_group_q_size;
 
-        MemcpyAsync(qkv_weight_tensor.GetPtr<void>() + dst_q_offset, weight_ptr + src_group_offset, total_group_q_size,
+        MemcpyAsync(static_cast<char*>(qkv_weight_tensor.GetPtr<void>()) + dst_q_offset, static_cast<char*>(weight_ptr) + src_group_offset, total_group_q_size,
                     MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
 
         size_t src_k_offset = src_group_offset + total_group_q_size;
         size_t dst_k_offset = k_dst_start + local_group * kv_head_size;
-        MemcpyAsync(qkv_weight_tensor.GetPtr<void>() + dst_k_offset, weight_ptr + src_k_offset, kv_head_size,
+        MemcpyAsync(static_cast<char*>(qkv_weight_tensor.GetPtr<void>()) + dst_k_offset, static_cast<char*>(weight_ptr) + src_k_offset, kv_head_size,
                     MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
 
         size_t src_v_offset = src_k_offset + kv_head_size;
         size_t dst_v_offset = v_dst_start + local_group * kv_head_size;
-        MemcpyAsync(qkv_weight_tensor.GetPtr<void>() + dst_v_offset, weight_ptr + src_v_offset, kv_head_size,
+        MemcpyAsync(static_cast<char*>(qkv_weight_tensor.GetPtr<void>()) + dst_v_offset, static_cast<char*>(weight_ptr) + src_v_offset, kv_head_size,
                     MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
       }
     } else if (tensor_name.find("self_attn.W_pack.weight") != std::string::npos) {
@@ -471,12 +471,12 @@ Status CommonWeight<T>::LoadWeightsFromFile(const std::shared_ptr<BaseFileTensor
       q_para_offset *= q_size;
       kv_para_offset *= qkv_pitch;
 
-      MemcpyAsync(qkv_weight_tensor.GetPtr<void>(), weight_ptr + q_para_offset, q_size, MEMCPY_HOST_TO_DEVICE,
+      MemcpyAsync(qkv_weight_tensor.GetPtr<void>(), static_cast<char*>(weight_ptr) + q_para_offset, q_size, MEMCPY_HOST_TO_DEVICE,
                   context_->GetMemoryManageStreams()[rank_]);
-      MemcpyAsync(qkv_weight_tensor.GetPtr<void>() + q_size, weight_ptr + q_size * tensor_para_size_ + kv_para_offset,
+      MemcpyAsync(static_cast<char*>(qkv_weight_tensor.GetPtr<void>()) + q_size, static_cast<char*>(weight_ptr) + q_size * tensor_para_size_ + kv_para_offset,
                   qkv_pitch, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
-      MemcpyAsync(qkv_weight_tensor.GetPtr<void>() + q_size + qkv_pitch,
-                  weight_ptr + kv_para_offset + (q_size + qkv_pitch) * tensor_para_size_, qkv_pitch,
+      MemcpyAsync(static_cast<char*>(qkv_weight_tensor.GetPtr<void>()) + q_size + qkv_pitch,
+                  static_cast<char*>(weight_ptr) + kv_para_offset + (q_size + qkv_pitch) * tensor_para_size_, qkv_pitch,
                   MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
 
     } else if (tensor_name.find("query_key_value.bias") != std::string::npos) {
@@ -492,12 +492,12 @@ Status CommonWeight<T>::LoadWeightsFromFile(const std::shared_ptr<BaseFileTensor
       q_para_offset *= q_size;
       kv_para_offset *= qkv_pitch;
 
-      MemcpyAsync(qkv_bias_tensor.GetPtr<void>(), weight_ptr + q_para_offset, q_size, MEMCPY_HOST_TO_DEVICE,
+      MemcpyAsync(qkv_bias_tensor.GetPtr<void>(), static_cast<char*>(weight_ptr) + q_para_offset, q_size, MEMCPY_HOST_TO_DEVICE,
                   context_->GetMemoryManageStreams()[rank_]);
-      MemcpyAsync(qkv_bias_tensor.GetPtr<void>() + q_size, weight_ptr + kv_para_offset + q_size * tensor_para_size_,
+      MemcpyAsync(static_cast<char*>(qkv_bias_tensor.GetPtr<void>()) + q_size, static_cast<char*>(weight_ptr) + kv_para_offset + q_size * tensor_para_size_,
                   qkv_pitch, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
-      MemcpyAsync(qkv_bias_tensor.GetPtr<void>() + q_size + qkv_pitch,
-                  weight_ptr + kv_para_offset + (q_size + qkv_pitch) * tensor_para_size_, qkv_pitch,
+      MemcpyAsync(static_cast<char*>(qkv_bias_tensor.GetPtr<void>()) + q_size + qkv_pitch,
+                  static_cast<char*>(weight_ptr) + kv_para_offset + (q_size + qkv_pitch) * tensor_para_size_, qkv_pitch,
                   MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
     } else {
       KLLM_LOG_DEBUG << "state_dict[" << tensor_name << "] will not be used";
@@ -525,8 +525,8 @@ Status CommonWeight<T>::PermuteSingleTensorOfQKVWeight(void* qkv_src, void* qkv_
   // NOTE(karlluo): for ascend, there is a issue that can not use Memcpy2DAsync.
   // will fix it when it work.
   for (size_t row_idx = 0; row_idx < data_shape[2]; ++row_idx) {
-    MemcpyAsync(qkv_dst + row_idx * qkv_dst_shape[1] * sizeof(T),
-                q_out_tensor.GetPtr<void>() + row_idx * data_shape[1] * sizeof(T), data_shape[1] * sizeof(T),
+    MemcpyAsync(static_cast<char*>(qkv_dst) + row_idx * qkv_dst_shape[1] * sizeof(T),
+                static_cast<char*>(q_out_tensor.GetPtr<void>()) + row_idx * data_shape[1] * sizeof(T), data_shape[1] * sizeof(T),
                 MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
   }
 #endif
@@ -562,12 +562,12 @@ Status CommonWeight<T>::PermuteQKVWeight(Tensor& last_qkv_tensor, Tensor& q_in_t
     void* qkv_dst = last_qkv_tensor.GetPtr<void>();
     PermuteSingleTensorOfQKVWeight(qkv_src, qkv_dst, q_in_tensor, q_out_tensor, q_shape, qkv_dst_shape);
 
-    qkv_src = qkv_src + q_size;
-    qkv_dst = qkv_dst + q_shape[1] * sizeof(T);
+    qkv_src = static_cast<char*>(qkv_src) + q_size;
+    qkv_dst = static_cast<char*>(qkv_dst) + q_shape[1] * sizeof(T);
     PermuteSingleTensorOfQKVWeight(qkv_src, qkv_dst, q_in_tensor, q_out_tensor, kv_shape, qkv_dst_shape);
 
-    qkv_src = qkv_src + kv_size;
-    qkv_dst = qkv_dst + kv_shape[1] * sizeof(T);
+    qkv_src = static_cast<char*>(qkv_src) + kv_size;
+    qkv_dst = static_cast<char*>(qkv_dst) + kv_shape[1] * sizeof(T);
     PermuteSingleTensorOfQKVWeight(qkv_src, qkv_dst, q_in_tensor, q_out_tensor, kv_shape, qkv_dst_shape);
 
     Tensor t = last_qkv_tensor;
@@ -642,7 +642,7 @@ Status CommonWeight<T>::LoadRegularTensor(void* weight_ptr, std::string tensor_n
     size_t src_pitch = weights_map_[tensor_name].shape[1] * tensor_para_size * GetTypeSize(weight_data_type);
     size_t dst_pitch = weights_map_[tensor_name].shape[1] * GetTypeSize(weight_data_type);
     tensor_para_offset *= dst_pitch;
-    Memcpy2DAsync(weights_map_[tensor_name].GetPtr<void>(), dst_pitch, weight_ptr + tensor_para_offset, src_pitch,
+    Memcpy2DAsync(weights_map_[tensor_name].GetPtr<void>(), dst_pitch, static_cast<char*>(weight_ptr) + tensor_para_offset, src_pitch,
                   dst_pitch, weights_map_[tensor_name].shape[0], MEMCPY_HOST_TO_DEVICE,
                   context_->GetMemoryManageStreams()[rank_]);
   } else {
@@ -657,7 +657,7 @@ Status CommonWeight<T>::LoadRegularTensor(void* weight_ptr, std::string tensor_n
       size_t src_pitch = weight_shape[0] * weight_shape[1] / 2 * tensor_para_size * GetTypeSize(weight_data_type);
       size_t dst_pitch = weight_shape[0] * weight_shape[1] / 2 * GetTypeSize(weight_data_type);
       gate_para_offset *= dst_pitch;
-      Memcpy2DAsync(weights_map_[tensor_name].GetPtr<void>(), dst_pitch, weight_ptr + gate_para_offset, src_pitch,
+      Memcpy2DAsync(weights_map_[tensor_name].GetPtr<void>(), dst_pitch, static_cast<char*>(weight_ptr) + gate_para_offset, src_pitch,
                     dst_pitch, 2, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
     } else if (tensor_name.find("gate_up_proj.weight") != std::string::npos && model_config_.type == "hunyuan" &&
                model_config_.is_moe == false) {
@@ -665,10 +665,10 @@ Status CommonWeight<T>::LoadRegularTensor(void* weight_ptr, std::string tensor_n
       size_t half_len = weights_map_[tensor_name].GetTotalBytes() / 2;
       size_t all_half = half_len * tensor_para_size;
 
-      MemcpyAsync(weights_map_[tensor_name].GetPtr<void>(), weight_ptr + all_half + half_len * rank_, half_len,
+      MemcpyAsync(weights_map_[tensor_name].GetPtr<void>(), static_cast<char*>(weight_ptr) + all_half + half_len * rank_, half_len,
                   MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
 
-      MemcpyAsync(weights_map_[tensor_name].GetPtr<void>() + half_len, weight_ptr + half_len * rank_, half_len,
+      MemcpyAsync(static_cast<char*>(weights_map_[tensor_name].GetPtr<void>()) + half_len, static_cast<char*>(weight_ptr) + half_len * rank_, half_len,
                   MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
     } else if (tensor_name.find("gate_up_proj.weight") != std::string::npos &&
                model_config_.type.find("qwen") != std::string::npos && model_config_.is_moe == false) {
@@ -680,13 +680,13 @@ Status CommonWeight<T>::LoadRegularTensor(void* weight_ptr, std::string tensor_n
       size_t half_len = weights_map_[tensor_name].GetTotalBytes() / 2;
       size_t all_half = half_len * tensor_para_size;
 
-      MemcpyAsync(weights_map_[tensor_name].GetPtr<void>(), weight_ptr + half_len * rank_, half_len,
+      MemcpyAsync(weights_map_[tensor_name].GetPtr<void>(), static_cast<char*>(weight_ptr) + half_len * rank_, half_len,
                   MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
 
-      MemcpyAsync(weights_map_[tensor_name].GetPtr<void>() + half_len, weight_ptr + all_half + half_len * rank_,
+      MemcpyAsync(static_cast<char*>(weights_map_[tensor_name].GetPtr<void>()) + half_len, static_cast<char*>(weight_ptr) + all_half + half_len * rank_,
                   half_len, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
     } else {
-      MemcpyAsync(weights_map_[tensor_name].GetPtr<void>(), weight_ptr + tensor_para_offset,
+      MemcpyAsync(weights_map_[tensor_name].GetPtr<void>(), static_cast<char*>(weight_ptr) + tensor_para_offset,
                   weights_map_[tensor_name].GetTotalBytes() - sub_bytes, MEMCPY_HOST_TO_DEVICE,
                   context_->GetMemoryManageStreams()[rank_]);
     }
@@ -725,8 +725,8 @@ Status CommonWeight<T>::LoadMlpUpGateTensor(void* weight_ptr, std::string tensor
   size_t total_bytes = weights_map_[up_gate_weights_name].GetTotalBytes() / 2;
   tensor_para_offset *= total_bytes;
   SetDevice(rank_);
-  MemcpyAsync(weights_map_[up_gate_weights_name].GetPtr<void>() + concat_offset * total_bytes,
-              weight_ptr + tensor_para_offset, total_bytes, MEMCPY_HOST_TO_DEVICE,
+  MemcpyAsync(static_cast<char*>(weights_map_[up_gate_weights_name].GetPtr<void>()) + concat_offset * total_bytes,
+              static_cast<char*>(weight_ptr) + tensor_para_offset, total_bytes, MEMCPY_HOST_TO_DEVICE,
               context_->GetMemoryManageStreams()[rank_]);
   return Status();
 }
@@ -1038,7 +1038,7 @@ void CommonWeight<T>::ChunkGateWeight() {
       tensor_manager_->AddWeightTensor(up_proj_name, shape, gate_weight.dtype);
       MemcpyAsync(weights_map_[gate_proj_name_bk].GetPtr<void>(), gate_weight.GetPtr<void>(), size,
                   MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
-      MemcpyAsync(weights_map_[up_proj_name].GetPtr<void>(), gate_weight.GetPtr<void>() + size, size,
+      MemcpyAsync(weights_map_[up_proj_name].GetPtr<void>(), static_cast<char*>(gate_weight.GetPtr<void>()) + size, size,
                   MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
     } else {
       tensor_manager_->AddWeightTensor(gate_proj_name_bk, {gate_weight.shape[0], gate_weight.shape[1] / 2},
@@ -1049,7 +1049,7 @@ void CommonWeight<T>::ChunkGateWeight() {
       size_t dpitch = (gate_weight.shape[1] / 2) * GetTypeSize(gate_weight.dtype);
       Memcpy2DAsync(weights_map_[gate_proj_name_bk].GetPtr<void>(), dpitch, gate_weight.GetPtr<void>(), spitch, dpitch,
                     gate_weight.shape[0], MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
-      Memcpy2DAsync(weights_map_[up_proj_name].GetPtr<void>(), dpitch, gate_weight.GetPtr<void>() + dpitch, spitch,
+      Memcpy2DAsync(weights_map_[up_proj_name].GetPtr<void>(), dpitch, static_cast<char*>(gate_weight.GetPtr<void>()) + dpitch, spitch,
                     dpitch, gate_weight.shape[0], MEMCPY_DEVICE_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
     }
     weights_map_[gate_proj_name] = weights_map_[gate_proj_name_bk];

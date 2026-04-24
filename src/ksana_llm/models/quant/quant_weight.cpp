@@ -208,7 +208,7 @@ void QuantWeight<T>::LoadMoeIntQuantWeight(const std::string& tensor_name, std::
         tensor_manager_->AddWeightTensor(name, shape, weight_data_type);
       }
       size_t size = shape[1] * GetTypeSize(weight_data_type);
-      void* dst_ptr = weights_map_[name].GetPtr<void>() + expert_idx * size;
+      void* dst_ptr = static_cast<char*>(weights_map_[name].GetPtr<void>()) + expert_idx * size;
       // up and gate use the same g_idx for all ranks
       MemcpyAsync(dst_ptr, weight_ptr, size, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
     } else if (tensor_name.find("down_proj") != std::string::npos) {
@@ -220,8 +220,8 @@ void QuantWeight<T>::LoadMoeIntQuantWeight(const std::string& tensor_name, std::
         tensor_manager_->AddWeightTensor(name, shape, weight_data_type);
       }
       size_t size = shape[1] * GetTypeSize(weight_data_type);
-      void* src_ptr = weight_ptr + tp_rank * size;
-      void* dst_ptr = weights_map_[name].GetPtr<void>() + expert_idx * size;
+      void* src_ptr = static_cast<char*>(weight_ptr) + tp_rank * size;
+      void* dst_ptr = static_cast<char*>(weights_map_[name].GetPtr<void>()) + expert_idx * size;
       MemcpyAsync(dst_ptr, src_ptr, size, MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
     } else {
       KLLM_THROW(fmt::format("Not support weight : {}", tensor_name));
@@ -273,12 +273,12 @@ void QuantWeight<T>::LoadMoeIntQuantWeight(const std::string& tensor_name, std::
                                      : 0;
       Tensor& up_gate_experts_tensor = weights_map_[up_gate_experts_name];
       if (tensor_name.find(".gate_proj.") != std::string::npos) {
-        MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + expert_idx * double_expert_pitch,
-                    tensor.data_ptr() + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
+        MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + expert_idx * double_expert_pitch,
+                    static_cast<char*>(tensor.data_ptr()) + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
       } else if (tensor_name.find(".up_proj.") != std::string::npos) {
-        MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + expert_idx * double_expert_pitch + expert_pitch,
-                    tensor.data_ptr() + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
+        MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + expert_idx * double_expert_pitch + expert_pitch,
+                    static_cast<char*>(tensor.data_ptr()) + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
       }
     }
@@ -307,8 +307,8 @@ void QuantWeight<T>::LoadMoeIntQuantWeight(const std::string& tensor_name, std::
       size_t src_down_offset =
           runtime_config_.parallel_basic_config.moe_tensor_para_size > 1 ? (rank_ / expert_para_size_) * dst_pitch : 0;
       Tensor& down_experts_tensor = weights_map_[down_experts_name];
-      Memcpy2DAsync(down_experts_tensor.GetPtr<void>() + expert_idx * expert_pitch, dst_pitch,
-                    tensor.data_ptr() + src_down_offset, src_pitch, dst_pitch, hidden_units, MEMCPY_HOST_TO_DEVICE,
+      Memcpy2DAsync(static_cast<char*>(down_experts_tensor.GetPtr<void>()) + expert_idx * expert_pitch, dst_pitch,
+                    static_cast<char*>(tensor.data_ptr()) + src_down_offset, src_pitch, dst_pitch, hidden_units, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
     }
     KLLM_LOG_DEBUG << fmt::format("Success load weight:{} on rank {}", tensor_name, rank_);
@@ -963,14 +963,12 @@ bool QuantWeight<T>::LoadMoeFp8E4m3BlockWiseScale(const std::string& tensor_name
                                      ? (rank_ / expert_para_size_) * expert_scale_pitch
                                      : 0;
       if (tensor_name.find(".gate_proj.") != std::string::npos) {
-        MemcpyAsync(weights_map_[up_gate_experts_scale_name].GetPtr<void>() +
-                        static_cast<size_t>(expert_idx) * double_expert_scale_pitch,
-                    weight_ptr + src_upgate_offset, expert_scale_pitch, MEMCPY_HOST_TO_DEVICE,
+        MemcpyAsync(static_cast<char*>(weights_map_[up_gate_experts_scale_name].GetPtr<void>()) + static_cast<size_t>(expert_idx) * double_expert_scale_pitch,
+                    static_cast<char*>(weight_ptr) + src_upgate_offset, expert_scale_pitch, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
       } else if (tensor_name.find(".up_proj.") != std::string::npos) {
-        MemcpyAsync(weights_map_[up_gate_experts_scale_name].GetPtr<void>() +
-                        static_cast<size_t>(expert_idx) * double_expert_scale_pitch + expert_scale_pitch,
-                    weight_ptr + src_upgate_offset, expert_scale_pitch, MEMCPY_HOST_TO_DEVICE,
+        MemcpyAsync(static_cast<char*>(weights_map_[up_gate_experts_scale_name].GetPtr<void>()) + static_cast<size_t>(expert_idx) * double_expert_scale_pitch + expert_scale_pitch,
+                    static_cast<char*>(weight_ptr) + src_upgate_offset, expert_scale_pitch, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
       }
     }
@@ -990,8 +988,8 @@ bool QuantWeight<T>::LoadMoeFp8E4m3BlockWiseScale(const std::string& tensor_name
       size_t src_down_offset =
           runtime_config_.parallel_basic_config.moe_tensor_para_size > 1 ? (rank_ / expert_para_size_) * dst_pitch : 0;
       Memcpy2DAsync(
-          weights_map_[down_experts_scale_name].GetPtr<void>() + static_cast<size_t>(expert_idx) * expert_scale_pitch,
-          dst_pitch, weight_ptr + src_down_offset, src_pitch, dst_pitch, down_experts_scale_shape[1],
+          static_cast<char*>(weights_map_[down_experts_scale_name].GetPtr<void>()) + static_cast<size_t>(expert_idx) * expert_scale_pitch,
+          dst_pitch, static_cast<char*>(weight_ptr) + src_down_offset, src_pitch, dst_pitch, down_experts_scale_shape[1],
           MEMCPY_HOST_TO_DEVICE, context_->GetMemoryManageStreams()[rank_]);
     }
   }

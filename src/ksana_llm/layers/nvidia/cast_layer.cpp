@@ -25,7 +25,7 @@ Status CastLayer::ForwardT(const std::vector<Tensor>& input_tensors, std::vector
   Tensor& output = output_tensors[0];
 
   DataToFloat<SRC_DTYPE>(input.GetPtr<void>(), input.GetElementNumber(), vocab_size, vocab_size_pad,
-                         output.GetPtr<void>() + output_offset, context_->GetComputeStreams()[rank_].Get());
+                         static_cast<char*>(output.GetPtr<void>()) + output_offset, context_->GetComputeStreams()[rank_].Get());
   output.dtype = DataType::TYPE_FP32;
   output.shape = input.shape;
   return Status();

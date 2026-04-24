@@ -156,13 +156,13 @@ Status CommonMoeWeight<T>::LoadWeightsFromFile(const std::shared_ptr<BaseFileTen
       const size_t src_pitch = 2 * src_width;
       const size_t dst_pitch = 2 * width;
       // gate
-      void* src_ptr = weight_ptr + start_expert * hidden_units * src_pitch + 0 * src_width + rank_ * width;
-      void* dst_ptr = tensor.GetPtr<void>() + 1 * width;
+      void* src_ptr = static_cast<char*>(weight_ptr) + start_expert * hidden_units * src_pitch + 0 * src_width + rank_ * width;
+      void* dst_ptr = static_cast<char*>(tensor.GetPtr<void>()) + 1 * width;
       Memcpy2DAsync(dst_ptr, dst_pitch, src_ptr, src_pitch, width, height, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
       // up
-      src_ptr = weight_ptr + start_expert * hidden_units * src_pitch + 1 * src_width + rank_ * width;
-      dst_ptr = tensor.GetPtr<void>() + 0 * width;
+      src_ptr = static_cast<char*>(weight_ptr) + start_expert * hidden_units * src_pitch + 1 * src_width + rank_ * width;
+      dst_ptr = static_cast<char*>(tensor.GetPtr<void>()) + 0 * width;
       Memcpy2DAsync(dst_ptr, dst_pitch, src_ptr, src_pitch, width, height, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
     } else if (tensor_name.find(".experts.down_proj.") != std::string::npos) {
@@ -185,7 +185,7 @@ Status CommonMoeWeight<T>::LoadWeightsFromFile(const std::shared_ptr<BaseFileTen
       const size_t width = moe_inter_size_per_rank * hidden_units * GetTypeSize(weight_data_type);
       const size_t src_pitch = moe_inter_size * hidden_units * GetTypeSize(weight_data_type);
       const size_t dst_pitch = width;
-      void* const src_ptr = weight_ptr + start_expert * src_pitch + rank_ * dst_pitch;
+      void* const src_ptr = static_cast<char*>(weight_ptr) + start_expert * src_pitch + rank_ * dst_pitch;
       void* const dst_ptr = tensor.GetPtr<void>();
       Memcpy2DAsync(dst_ptr, dst_pitch, src_ptr, src_pitch, width, height, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
@@ -212,14 +212,14 @@ Status CommonMoeWeight<T>::LoadWeightsFromFile(const std::shared_ptr<BaseFileTen
                                            : 0;
       const Tensor& up_gate_experts_tensor = weights_map_[up_gate_experts_name];
       if (tensor_name.find(".up_proj.") != std::string::npos) {
-        MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + static_cast<size_t>(expert_idx) * double_expert_pitch +
+        MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + static_cast<size_t>(expert_idx) * double_expert_pitch +
                         (use_vllm_moe ? expert_pitch : 0),
-                    weight_ptr + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
+                    static_cast<char*>(weight_ptr) + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
       } else if (tensor_name.find(".gate_proj.") != std::string::npos) {
-        MemcpyAsync(up_gate_experts_tensor.GetPtr<void>() + static_cast<size_t>(expert_idx) * double_expert_pitch +
+        MemcpyAsync(static_cast<char*>(up_gate_experts_tensor.GetPtr<void>()) + static_cast<size_t>(expert_idx) * double_expert_pitch +
                         (use_vllm_moe ? 0 : expert_pitch),
-                    weight_ptr + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
+                    static_cast<char*>(weight_ptr) + src_upgate_offset, expert_pitch, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
       }
     } else if (tensor_name.find(".down_proj.") != std::string::npos) {
@@ -242,8 +242,8 @@ Status CommonMoeWeight<T>::LoadWeightsFromFile(const std::shared_ptr<BaseFileTen
       const size_t src_down_offset =
           runtime_config_.parallel_basic_config.moe_tensor_para_size > 1 ? (rank_ / expert_para_size_) * dst_pitch : 0;
       const Tensor& down_expert_tensor = weights_map_[down_experts_name];
-      Memcpy2DAsync(down_expert_tensor.GetPtr<void>() + static_cast<size_t>(expert_idx) * expert_pitch, dst_pitch,
-                    weight_ptr + src_down_offset, src_pitch, dst_pitch, hidden_units, MEMCPY_HOST_TO_DEVICE,
+      Memcpy2DAsync(static_cast<char*>(down_expert_tensor.GetPtr<void>()) + static_cast<size_t>(expert_idx) * expert_pitch, dst_pitch,
+                    static_cast<char*>(weight_ptr) + src_down_offset, src_pitch, dst_pitch, hidden_units, MEMCPY_HOST_TO_DEVICE,
                     context_->GetMemoryManageStreams()[rank_]);
     }
     KLLM_LOG_DEBUG << "Success load weight:" << tensor_name << " on rank " << rank_;

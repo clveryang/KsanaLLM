@@ -426,7 +426,7 @@ TEST(NcclCommunicatorTest, ProcessHeartbeatData_MockHeartbeat) {
       for (int dev = 0; dev < 2; ++dev) {
         for (int role = 0; role < 2; ++role) {
           int idx = node * 4 + dev * 2 + role;
-          addrs.emplace_back(node, dev, "127.0.0.1:" + std::to_string(base + idx));
+          addrs.emplace_back(node, dev, "127.0.0.1:" + std::to_string(static_cast<char*>(base) + idx));
         }
       }
     }

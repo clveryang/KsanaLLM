@@ -80,7 +80,9 @@ Status InferenceEngine::Initialize() {
   // Environment is must be initialized befroe context.
   KLLM_LOG_INFO << "Get tensor parallel: " << tp_num << " attention data parallel: " << attn_data_parallel_size
                 << " max_pp_batch_num: " << batch_scheduler_config.max_pp_batch_num;
+  KLLM_LOG_INFO << "Creating Context...";
   context_.reset(new Context(tp_num, attn_data_parallel_size, batch_scheduler_config.max_pp_batch_num));
+  KLLM_LOG_INFO << "Context created OK";
 
   // Load model configs.
   ModelConfig model_config;

@@ -35,7 +35,7 @@ void AlignedMemoryQueue::AllocateAndAlign() {
   size_t offset = 0;
 
   for (auto& item : queue_) {
-    *(item.first) = item.second == 0 ? nullptr : static_cast<void*>(base + offset);
+    *(item.first) = item.second == 0 ? nullptr : static_cast<void*>(static_cast<char*>(base) + offset);
     offset += AlignSize(item.second);
   }
   queue_.clear();

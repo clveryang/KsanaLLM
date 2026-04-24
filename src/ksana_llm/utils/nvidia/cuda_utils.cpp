@@ -1,3 +1,4 @@
+#ifndef ILUVATAR_MINIMAL
 /* Copyright 2024 Tencent Inc.  All rights reserved.
 
 ==============================================================================*/
@@ -271,3 +272,5 @@ void NvlsMcastMemory::FreeMcastMemory(const size_t device_id) {
 }
 
 }  // namespace ksana_llm
+
+#endif

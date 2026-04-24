@@ -64,7 +64,7 @@ class FinegrainedMixedDtypeGemmLayer : public BaseLayer {
       if (set_workspace_buffer_info_) {
         set_workspace_buffer_info_ = false;
         kernel_workspace_ptr_ = ptr;
-        quantized_input_ptr_ = kernel_workspace_ptr_ + kernel_workspace_size_;
+        quantized_input_ptr_ = static_cast<char*>(kernel_workspace_ptr_) + kernel_workspace_size_;
       }
     }
   } workspace_info_;

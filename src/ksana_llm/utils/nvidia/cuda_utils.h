@@ -7,9 +7,11 @@
 #include <cublasLt.h>
 #include <cublas_v2.h>
 #include <cuda.h>
-#include <cudaTypedefs.h>
+#ifndef ENABLE_ILUVATAR
+#  include <cudaTypedefs.h>       // not present in Iluvatar Corex 4.4
+#  include <nvtx3/nvToolsExt.h>   // nvtx3 also missing
+#endif
 #include <cuda_runtime.h>
-#include <nvtx3/nvToolsExt.h>
 
 #include <cstdlib>
 #include <stdexcept>
@@ -165,7 +167,9 @@ float MeasureCudaExecutionTime(Func&& func, cudaStream_t stream, int warmups = 1
 // File descriptor for local IPC or fabric handle for remote access
 union IpcMemHandle {
   uint64_t fd;
-  CUmemFabricHandle fh;
+#ifndef ENABLE_ILUVATAR
+  CUmemFabricHandle fh;    // Hopper multicast, unavailable on Iluvatar
+#endif
 };
 
 struct NvlsHandle {
@@ -176,7 +180,9 @@ struct NvlsHandle {
   size_t signal_pad_offset = 0;
   CUmemAllocationHandleType mem_handle_type;
   CUmemAccessDesc access_desc;
-  CUmulticastObjectProp mcprop;
+#ifndef ENABLE_ILUVATAR
+  CUmulticastObjectProp mcprop;  // Hopper multicast
+#endif
   // Unicast/Multicast device pointers
   uintptr_t uc_ptr = 0;
   uintptr_t mc_ptr = 0;

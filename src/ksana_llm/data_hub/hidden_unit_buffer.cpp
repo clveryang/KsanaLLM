@@ -58,7 +58,7 @@ Status HiddenUnitBufferPool::ConvertHostBufferToDevice(HiddenUnitDeviceBuffer* h
     }
 #ifdef ENABLE_ACL
     if (prefill_buffer_bytes > 0) {
-      Memcpy(hidden_unit_dev->prefill_tensors[i].GetPtr<void>(), hidden_unit_host->data + buffer_bytes,
+      Memcpy(hidden_unit_dev->prefill_tensors[i].GetPtr<void>(), hidden_unit_host->static_cast<char*>(data) + buffer_bytes,
              prefill_buffer_bytes, MEMCPY_HOST_TO_DEVICE);
       hidden_unit_dev->prefill_tensors[i].shape = prefill_buffer_shape;
     }
@@ -103,7 +103,7 @@ Status HiddenUnitBufferPool::ConvertDeviceBufferToHost(HiddenUnitHostBuffer* hid
     }
 #ifdef ENABLE_ACL
     if (prefill_buffer_bytes > 0) {
-      Memcpy(hidden_unit_host->data + buffer_bytes, hidden_unit_dev->prefill_tensors[i].GetPtr<void>(),
+      Memcpy(hidden_unit_host->static_cast<char*>(data) + buffer_bytes, hidden_unit_dev->prefill_tensors[i].GetPtr<void>(),
              prefill_buffer_bytes, MEMCPY_DEVICE_TO_HOST);
     }
 #endif

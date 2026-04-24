@@ -259,12 +259,12 @@ class ScheduleOutputParser {
 
     // vec size
     int vec_size = vec.size();
-    std::memcpy(data + offset, &vec_size, sizeof(int));
+    std::memcpy(static_cast<char*>(data) + offset, &vec_size, sizeof(int));
     offset += sizeof(int);
 
     // vec elements.
     for (T e : vec) {
-      std::memcpy(data + offset, &e, sizeof(T));
+      std::memcpy(static_cast<char*>(data) + offset, &e, sizeof(T));
       offset += sizeof(T);
     }
     bytes = offset;
@@ -277,11 +277,11 @@ class ScheduleOutputParser {
     size_t offset = 0;
 
     // vec size
-    int vec_size = *reinterpret_cast<int*>(data + offset);
+    int vec_size = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
     offset += sizeof(int);
 
     for (int i = 0; i < vec_size; ++i) {
-      T e = *reinterpret_cast<T*>(data + offset);
+      T e = *reinterpret_cast<T*>(static_cast<char*>(data) + offset);
       vec.push_back(e);
       offset += sizeof(T);
     }
@@ -295,18 +295,18 @@ class ScheduleOutputParser {
     size_t offset = 0;
 
     int dict_size = dict.size();
-    std::memcpy(data + offset, &dict_size, sizeof(int));
+    std::memcpy(static_cast<char*>(data) + offset, &dict_size, sizeof(int));
     offset += sizeof(int);
 
     for (auto it = dict.begin(); it != dict.end(); ++it) {
       K key = it->first;
       std::vector<V> vec = it->second;
 
-      std::memcpy(data + offset, &key, sizeof(K));
+      std::memcpy(static_cast<char*>(data) + offset, &key, sizeof(K));
       offset += sizeof(K);
 
       size_t inner_bytes;
-      SerializeVector(vec, data + offset, inner_bytes);
+      SerializeVector(vec, static_cast<char*>(data) + offset, inner_bytes);
       offset += inner_bytes;
     }
     bytes = offset;
@@ -318,16 +318,16 @@ class ScheduleOutputParser {
   static Status DeserializeKeyToVector(void* data, std::unordered_map<K, std::vector<V>>& dict, size_t& bytes) {
     size_t offset = 0;
 
-    int dict_size = *reinterpret_cast<int*>(data + offset);
+    int dict_size = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
     offset += sizeof(int);
 
     for (int i = 0; i < dict_size; ++i) {
-      K key = *reinterpret_cast<K*>(data + offset);
+      K key = *reinterpret_cast<K*>(static_cast<char*>(data) + offset);
       offset += sizeof(K);
 
       size_t inner_bytes;
       std::vector<V> vals;
-      DeserializeVector(data + offset, vals, inner_bytes);
+      DeserializeVector(static_cast<char*>(data) + offset, vals, inner_bytes);
       offset += inner_bytes;
 
       dict[key] = vals;
@@ -343,14 +343,14 @@ class ScheduleOutputParser {
 
     // vec size
     int vec_size = vecs.size();
-    std::memcpy(data + offset, &vec_size, sizeof(int));
+    std::memcpy(static_cast<char*>(data) + offset, &vec_size, sizeof(int));
     offset += sizeof(int);
 
     size_t inner_bytes;
 
     // vec elements.
     for (const std::vector<T>& vec : vecs) {
-      SerializeVector(vec, data + offset, inner_bytes);
+      SerializeVector(vec, static_cast<char*>(data) + offset, inner_bytes);
       offset += inner_bytes;
     }
     bytes = offset;
@@ -362,14 +362,14 @@ class ScheduleOutputParser {
   static Status DeserializeVectorOfVector(void* data, std::vector<std::vector<T>>& vecs, size_t& bytes) {
     size_t offset = 0;
 
-    int vec_size = *reinterpret_cast<int*>(data + offset);
+    int vec_size = *reinterpret_cast<int*>(static_cast<char*>(data) + offset);
     offset += sizeof(int);
 
     size_t inner_bytes;
 
     for (int i = 0; i < vec_size; ++i) {
       std::vector<T> vec;
-      DeserializeVector(data + offset, vec, inner_bytes);
+      DeserializeVector(static_cast<char*>(data) + offset, vec, inner_bytes);
       offset += inner_bytes;
 
       vecs.push_back(vec);

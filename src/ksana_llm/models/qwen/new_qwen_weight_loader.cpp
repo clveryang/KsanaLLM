@@ -197,8 +197,8 @@ Status NewQwenWeightLoader::ProcessModelWeights(const std::unordered_map<std::st
       } else if (host_weight_name.find("v_proj.bias") != std::string::npos) {
         dev_offset = host_shape0_split * GetTypeSize(host_weight_tensor.dtype) * 2;
       }
-      MemcpyAsync(query_key_value_bias_tensor.GetPtr<void>() + dev_offset,
-                  host_weight_tensor.GetPtr<void>() + host_offset,
+      MemcpyAsync(static_cast<char*>(query_key_value_bias_tensor.GetPtr<void>()) + dev_offset,
+                  static_cast<char*>(host_weight_tensor.GetPtr<void>()) + host_offset,
                   host_shape0_split * GetTypeSize(host_weight_tensor.dtype), MEMCPY_HOST_TO_DEVICE,
                   context_->GetMemoryManageStreams()[dev_rank]);
       continue;

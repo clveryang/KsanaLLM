@@ -120,7 +120,9 @@ std::string BaseModelWeightLoader::GetWeightMapPath(const std::string& model_pat
   std::string& weight_path = optional_file.GetOptionalFile(model_path, "weight_map", model_type + weight_map_suffix);
   if (weight_path.empty()) {  // searching weight_map under ksana_llm
     Dl_info info;
-    if (dladdr(reinterpret_cast<void*>(&BaseModelWeightLoader::GetWeightMapPath), &info)) {
+    void* fn_addr = nullptr;
+    { auto mfp = &BaseModelWeightLoader::GetWeightMapPath; memcpy(&fn_addr, &mfp, sizeof(fn_addr)); }
+    if (dladdr(fn_addr, &info)) {
       std::filesystem::path so_path = std::filesystem::absolute(info.dli_fname);
       const std::string kRelativePath = "../../src/ksana_llm/python";
       std::string ksana_weight_map_path = so_path.parent_path() / kRelativePath / "weight_map";

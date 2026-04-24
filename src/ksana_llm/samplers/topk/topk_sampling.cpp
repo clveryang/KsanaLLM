@@ -31,11 +31,11 @@ TopkSampling::TopkSampling(size_t max_batch_size, size_t max_vocab_size, RandSta
   std::uniform_int_distribution<uint64_t> dis;
   std::vector<uint64_t> host_random_seeds(max_batch_size);
   for (auto& i : host_random_seeds) i = dis(gen);
-  Memcpy(workspace_ + workspace_size_, host_random_seeds.data(), sizeof(uint64_t) * max_batch_size,
+  Memcpy(static_cast<char*>(workspace_) + workspace_size_, host_random_seeds.data(), sizeof(uint64_t) * max_batch_size,
          MEMCPY_HOST_TO_DEVICE);
 
   CUDA_CHECK_LAST_ERROR(tensorrt_llm::kernels::InvokeCurandBatchInitialize(
-      device_curandstates, nullptr, max_batch_size, static_cast<uint64_t*>(workspace_ + workspace_size_), 0));
+      device_curandstates, nullptr, max_batch_size, static_cast<uint64_t*>(static_cast<void*>(static_cast<char*>(workspace_) + workspace_size_)), 0));
 #elif defined(ENABLE_ACL)
   // TODO(karlluo): support topk > 1 and toppp
   int32_t rank;

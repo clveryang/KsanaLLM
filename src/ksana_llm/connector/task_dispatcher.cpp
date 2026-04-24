@@ -333,7 +333,7 @@ void TaskDispatcher::RegisterDecodeRecv() {
 #ifdef ENABLE_CUDA
         cudaStream_t cur_stream = device_streams_[tk.decode_device_id];
         CUDA_CHECK(
-            cudaMemcpyAsync(task->dst_ptr, data + sizeof(TaskKey), tk.tensor_size, cudaMemcpyHostToDevice, cur_stream));
+            cudaMemcpyAsync(task->dst_ptr, static_cast<const char*>(data) + sizeof(TaskKey), tk.tensor_size, cudaMemcpyHostToDevice, cur_stream));
         CUDA_CHECK(cudaStreamSynchronize(cur_stream));
 #endif
       }

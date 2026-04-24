@@ -149,7 +149,7 @@ Status FlashAttention::AddAttentionPrefixCache(std::vector<Tensor>& hidden_buffe
     // The single token is located in the latter half; copy it all at once and then exit
     if (idx >= model_input->dp_multi_token_request_num && model_input->dp_single_token_request_num > 0) {
       MemcpyAsync(shared_buffer_tensors[0].template GetPtr<void>(),
-                  mmha_origin_input.template GetPtr<void>() + src_offset,
+                  static_cast<char*>(mmha_origin_input.template GetPtr<void>()) + src_offset,
                   copy_size * model_input->dp_single_token_request_num, MEMCPY_DEVICE_TO_DEVICE,
                   context_->GetComputeStreams()[rank_]);
       shared_buffer_tensors[0].shape = {copy_size / dtype_size, model_input->dp_single_token_request_num};
@@ -157,8 +157,8 @@ Status FlashAttention::AddAttentionPrefixCache(std::vector<Tensor>& hidden_buffe
       break;
     }
     // Copy multi tokens
-    MemcpyAsync(mmha_prefix_input.template GetPtr<void>() + dst_offset,
-                mmha_origin_input.template GetPtr<void>() + src_offset, copy_size, MEMCPY_DEVICE_TO_DEVICE,
+    MemcpyAsync(static_cast<char*>(mmha_prefix_input.template GetPtr<void>()) + dst_offset,
+                static_cast<char*>(mmha_origin_input.template GetPtr<void>()) + src_offset, copy_size, MEMCPY_DEVICE_TO_DEVICE,
                 context_->GetComputeStreams()[rank_]);
     total_token_num += input_length;
   }
@@ -192,8 +192,8 @@ Status FlashAttention::RemoveAttentionPrefixCache(std::vector<Tensor>& hidden_bu
     src_offset += prefix_length * size_per_token;
     size_t copy_size = size_per_token * (input_length - prefix_length);
 
-    MemcpyAsync(mmha_output.template GetPtr<void>() + dst_offset,
-                mmha_prefix_output.template GetPtr<void>() + src_offset, copy_size, MEMCPY_DEVICE_TO_DEVICE,
+    MemcpyAsync(static_cast<char*>(mmha_output.template GetPtr<void>()) + dst_offset,
+                static_cast<char*>(mmha_prefix_output.template GetPtr<void>()) + src_offset, copy_size, MEMCPY_DEVICE_TO_DEVICE,
                 context_->GetComputeStreams()[rank_]);
     src_offset += copy_size;
     dst_offset += copy_size;
@@ -202,7 +202,7 @@ Status FlashAttention::RemoveAttentionPrefixCache(std::vector<Tensor>& hidden_bu
   mmha_output.shape = {total_token_num_without_prefix, mmha_prefix_output.shape[1]};
   mmha_output.dtype = mmha_prefix_output.dtype;
   if (model_input->dp_single_token_request_num > 0) {
-    MemcpyAsync(hidden_buffer_tensors_0[0].template GetPtr<void>() + shared_buffer_tensors[0].GetTotalBytes() /
+    MemcpyAsync(static_cast<char*>(hidden_buffer_tensors_0[0].template GetPtr<void>()) + shared_buffer_tensors[0].GetTotalBytes() /
                                                                          model_input->dp_single_token_request_num *
                                                                          total_token_num_without_prefix,
                 shared_buffer_tensors[0].template GetPtr<void>(), shared_buffer_tensors[0].GetTotalBytes(),

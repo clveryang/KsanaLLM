@@ -101,3 +101,8 @@ d.*
 !src/ksana_llm/python/serving_forward_client.py
 !src/ksana_llm/python/serving_generate_client.py
 !src/ksana_llm/python/serving_server.py
+src/ksana_llm/python/TinyLlama-1.1B-Chat/
+ref_triton_qwen2/
+engine.cu.phase5bak
+triton_qwen2_full.tar.gz
+build/

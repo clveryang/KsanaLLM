@@ -4,6 +4,8 @@
 #pragma once
 
 #ifdef ENABLE_CUDA
+// ENABLE_ILUVATAR is promoted to ENABLE_CUDA in device_types.h; include order
+// matters, so make sure device_types.h is seen before this point elsewhere.
 #  include "ksana_llm/utils/nvidia/nvidia_device.h"
 #endif
 
